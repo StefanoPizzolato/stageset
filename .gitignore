@@ -1,0 +1,14 @@
+.gradle/
+.gradle-user-home/
+.idea/
+.kotlin/
+.vs/
+local.properties
+**/build/
+captures/
+*.iml
+gradle-8.9/
+gradle-8.9-bin.zip
+ui-*.xml
+window_dump_*.xml
+home.png
