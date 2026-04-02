@@ -39,6 +39,7 @@ import com.codex.stageset.data.repository.PreviewSettingsRepository
 import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.data.repository.SongRepository
 import com.codex.stageset.ui.setlists.SetlistEditorRoute
+import com.codex.stageset.ui.setlists.SetlistPreviewRoute
 import com.codex.stageset.ui.setlists.SetlistsRoute
 import com.codex.stageset.ui.songs.SongEditorRoute
 import com.codex.stageset.ui.songs.SongPreviewRoute
@@ -55,10 +56,12 @@ private object Routes {
     const val SongPreview = "song-preview"
     const val SongEditor = "song-editor"
     const val Setlists = "setlists"
+    const val SetlistPreview = "setlist-preview"
     const val SetlistEditor = "setlist-editor"
 
     fun songPreview(songId: Long) = "$SongPreview/$songId"
     fun songEditor(songId: Long = -1L) = "$SongEditor/$songId"
+    fun setlistPreview(setlistId: Long) = "$SetlistPreview/$setlistId"
     fun setlistEditor(setlistId: Long = -1L) = "$SetlistEditor/$setlistId"
 }
 
@@ -83,6 +86,7 @@ fun StageSetApp(
     )
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
+    val hideTopLevelNavigation = currentDestination?.route?.startsWith("${Routes.SetlistPreview}/") == true
 
     BoxWithConstraints(
         modifier = Modifier
@@ -139,7 +143,24 @@ fun StageSetApp(
                     SetlistsRoute(
                         setlistRepository = setlistRepository,
                         onCreateSetlist = { navController.navigate(Routes.setlistEditor()) },
-                        onOpenSetlist = { setlistId -> navController.navigate(Routes.setlistEditor(setlistId)) },
+                        onOpenSetlist = { setlistId -> navController.navigate(Routes.setlistPreview(setlistId)) },
+                        onEditSetlist = { setlistId -> navController.navigate(Routes.setlistEditor(setlistId)) },
+                    )
+                }
+                composable(
+                    route = "${Routes.SetlistPreview}/{setlistId}",
+                    arguments = listOf(
+                        navArgument("setlistId") {
+                            type = NavType.LongType
+                        },
+                    ),
+                ) { backStack ->
+                    SetlistPreviewRoute(
+                        setlistId = backStack.arguments?.getLong("setlistId") ?: -1L,
+                        previewSettingsRepository = previewSettingsRepository,
+                        setlistRepository = setlistRepository,
+                        onBack = { navController.popBackStack() },
+                        onEditSetlist = { setlistId -> navController.navigate(Routes.setlistEditor(setlistId)) },
                     )
                 }
                 composable(
@@ -160,7 +181,7 @@ fun StageSetApp(
             }
         }
 
-        if (useNavigationRail) {
+        if (useNavigationRail && !hideTopLevelNavigation) {
             Row(modifier = Modifier.fillMaxSize()) {
                 NavigationRail(
                     modifier = Modifier
@@ -199,34 +220,38 @@ fun StageSetApp(
         } else {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
-                bottomBar = {
-                    Surface(
-                        tonalElevation = 4.dp,
-                        shadowElevation = 10.dp,
-                        color = MaterialTheme.colorScheme.surface,
-                    ) {
-                        NavigationBar(
-                            modifier = Modifier.fillMaxWidth(),
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 0.dp,
-                            windowInsets = NavigationBarDefaults.windowInsets,
+                bottomBar = if (hideTopLevelNavigation) {
+                    {}
+                } else {
+                    {
+                        Surface(
+                            tonalElevation = 4.dp,
+                            shadowElevation = 10.dp,
+                            color = MaterialTheme.colorScheme.surface,
                         ) {
-                            topLevelDestinations.forEach { destination ->
-                                val selected = destination.matches(currentDestination?.route)
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick = {
-                                        navController.navigate(destination.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
+                            NavigationBar(
+                                modifier = Modifier.fillMaxWidth(),
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                tonalElevation = 0.dp,
+                                windowInsets = NavigationBarDefaults.windowInsets,
+                            ) {
+                                topLevelDestinations.forEach { destination ->
+                                    val selected = destination.matches(currentDestination?.route)
+                                    NavigationBarItem(
+                                        selected = selected,
+                                        onClick = {
+                                            navController.navigate(destination.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                    icon = { Icon(destination.icon, contentDescription = destination.label) },
-                                    label = { Text(destination.label) },
-                                )
+                                        },
+                                        icon = { Icon(destination.icon, contentDescription = destination.label) },
+                                        label = { Text(destination.label) },
+                                    )
+                                }
                             }
                         }
                     }
@@ -246,6 +271,10 @@ private fun TopLevelDestination.matches(route: String?): Boolean = when (this.ro
             route?.startsWith("${Routes.SongPreview}/") == true ||
             route?.startsWith("${Routes.SongEditor}/") == true
     }
-    Routes.Setlists -> route == Routes.Setlists || route?.startsWith("${Routes.SetlistEditor}/") == true
+    Routes.Setlists -> {
+        route == Routes.Setlists ||
+            route?.startsWith("${Routes.SetlistPreview}/") == true ||
+            route?.startsWith("${Routes.SetlistEditor}/") == true
+    }
     else -> false
 }

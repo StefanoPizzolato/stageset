@@ -50,22 +50,19 @@ fun canonicalSectionLine(rawLine: String): String? {
     return canonicalSectionLabel(label)?.let { "[$it]" }
 }
 
-fun canonicalSectionLabel(rawLabel: String): String? {
-    val normalized = rawLabel.trim()
-        .removeSuffix(":")
-        .replace('_', ' ')
-        .replace('-', ' ')
-        .replace(Regex("""\s+"""), " ")
-        .trim()
-        .lowercase()
-
-    if (normalized.isBlank()) {
+fun sectionColorGroup(rawSectionLine: String): String? {
+    val trimmed = rawSectionLine.trim()
+    if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
         return null
     }
 
-    val entry = SectionLabelMap.entries.firstOrNull { (candidate, _) ->
-        normalized == candidate || normalized.startsWith("$candidate ")
-    } ?: return null
+    val label = trimmed.removePrefix("[").removeSuffix("]")
+    return resolveSectionEntry(label)?.key
+}
+
+fun canonicalSectionLabel(rawLabel: String): String? {
+    val entry = resolveSectionEntry(rawLabel) ?: return null
+    val normalized = normalizeSectionLabel(rawLabel)
 
     val suffix = normalized.removePrefix(entry.key).trim()
     return if (suffix.isBlank()) {
@@ -73,6 +70,27 @@ fun canonicalSectionLabel(rawLabel: String): String? {
     } else {
         "${entry.value} ${formatSectionSuffix(suffix)}"
     }
+}
+
+private fun resolveSectionEntry(rawLabel: String): Map.Entry<String, String>? {
+    val normalized = normalizeSectionLabel(rawLabel)
+    if (normalized.isBlank()) {
+        return null
+    }
+
+    return SectionLabelMap.entries.firstOrNull { (candidate, _) ->
+        normalized == candidate || normalized.startsWith("$candidate ")
+    }
+}
+
+private fun normalizeSectionLabel(rawLabel: String): String {
+    return rawLabel.trim()
+        .removeSuffix(":")
+        .replace('_', ' ')
+        .replace('-', ' ')
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+        .lowercase()
 }
 
 fun looksLikeChordLine(line: String): Boolean {

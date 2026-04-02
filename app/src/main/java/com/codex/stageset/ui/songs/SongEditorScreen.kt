@@ -46,6 +46,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import com.codex.stageset.chart.TransposeDirection
+import com.codex.stageset.chart.transposeChart
+import com.codex.stageset.chart.transposeKeySignature
 import com.codex.stageset.data.remote.UltimateGuitarBlockedException
 import com.codex.stageset.data.repository.Song
 import com.codex.stageset.data.repository.ImportedSongDraft
@@ -91,6 +94,16 @@ fun SongEditorRoute(
         keySignature = imported.keySignature.ifBlank { keySignature }
         chart = imported.chart
         feedbackMessage = message
+    }
+
+    fun transposeSong(direction: TransposeDirection) {
+        keySignature = transposeKeySignature(keySignature, direction)
+        chart = transposeChart(chart, direction)
+        feedbackMessage = if (direction == TransposeDirection.Up) {
+            "Transposed up a semitone."
+        } else {
+            "Transposed down a semitone."
+        }
     }
 
     fun launchDirectImport() {
@@ -213,6 +226,8 @@ fun SongEditorRoute(
                             onPresetChange = { preset = it },
                             onKeyChange = { keySignature = it },
                             onChartChange = { chart = it },
+                            onTransposeUp = { transposeSong(TransposeDirection.Up) },
+                            onTransposeDown = { transposeSong(TransposeDirection.Down) },
                             onImportUrlChange = { importUrl = it },
                             onImportClick = ::launchDirectImport,
                         )
@@ -251,6 +266,8 @@ fun SongEditorRoute(
                         onPresetChange = { preset = it },
                         onKeyChange = { keySignature = it },
                         onChartChange = { chart = it },
+                        onTransposeUp = { transposeSong(TransposeDirection.Up) },
+                        onTransposeDown = { transposeSong(TransposeDirection.Down) },
                         onImportUrlChange = { importUrl = it },
                         onImportClick = ::launchDirectImport,
                     )
@@ -330,6 +347,8 @@ private fun SongForm(
     onPresetChange: (String) -> Unit,
     onKeyChange: (String) -> Unit,
     onChartChange: (String) -> Unit,
+    onTransposeUp: () -> Unit,
+    onTransposeDown: () -> Unit,
     onImportUrlChange: (String) -> Unit,
     onImportClick: () -> Unit,
 ) {
@@ -378,6 +397,16 @@ private fun SongForm(
             singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
         )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            FilledTonalButton(onClick = onTransposeDown) {
+                Text("Transpose -")
+            }
+            FilledTonalButton(onClick = onTransposeUp) {
+                Text("Transpose +")
+            }
+        }
 
         Text(
             text = "Ultimate Guitar import",

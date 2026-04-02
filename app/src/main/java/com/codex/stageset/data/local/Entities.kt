@@ -81,3 +81,14 @@ data class SetlistSongRow(
     val artist: String,
     val keySignature: String,
 )
+
+data class SetlistPreviewSongRow(
+    val entryId: Long,
+    val songId: Long,
+    val position: Int,
+    val name: String,
+    val artist: String,
+    val preset: String,
+    val keySignature: String,
+    val chart: String,
+)

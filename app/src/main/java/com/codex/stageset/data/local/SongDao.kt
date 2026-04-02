@@ -34,6 +34,25 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE id = :songId")
     fun observeSong(songId: Long): Flow<SongEntity?>
 
+    @Query(
+        """
+        SELECT id FROM songs
+        WHERE name = :name
+          AND artist = :artist
+          AND preset = :preset
+          AND keySignature = :keySignature
+          AND chart = :chart
+        LIMIT 1
+        """,
+    )
+    suspend fun findMatchingSongId(
+        name: String,
+        artist: String,
+        preset: String,
+        keySignature: String,
+        chart: String,
+    ): Long?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSong(song: SongEntity): Long
 

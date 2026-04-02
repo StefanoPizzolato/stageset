@@ -44,6 +44,17 @@ data class SetlistSong(
     val keySignature: String,
 )
 
+data class SetlistPreviewSong(
+    val entryId: Long,
+    val songId: Long,
+    val position: Int,
+    val name: String,
+    val artist: String,
+    val preset: String,
+    val keySignature: String,
+    val chart: String,
+)
+
 data class SetlistSummary(
     val id: Long,
     val name: String,
@@ -58,6 +69,14 @@ data class SetlistDetail(
     val notes: String,
     val createdAt: Long,
     val songs: List<SetlistSong>,
+)
+
+data class SetlistPreviewDetail(
+    val id: Long,
+    val name: String,
+    val notes: String,
+    val createdAt: Long,
+    val songs: List<SetlistPreviewSong>,
 )
 
 data class SetlistDraft(

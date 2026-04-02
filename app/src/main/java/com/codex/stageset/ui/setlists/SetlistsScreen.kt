@@ -2,6 +2,8 @@
 
 package com.codex.stageset.ui.setlists
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,7 +30,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,16 +41,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.codex.stageset.data.repository.SetlistDetail
 import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.data.repository.SetlistSummary
+import com.codex.stageset.ui.common.readUtf8Text
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,9 +62,36 @@ fun SetlistsRoute(
     setlistRepository: SetlistRepository,
     onCreateSetlist: () -> Unit,
     onOpenSetlist: (Long) -> Unit,
+    onEditSetlist: (Long) -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     val setlists by setlistRepository.observeSetlists().collectAsState(initial = emptyList())
     var selectedSetlistId by rememberSaveable { mutableLongStateOf(-1L) }
+    val importArchiveLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) {
+            return@rememberLauncherForActivityResult
+        }
+
+        scope.launch {
+            runCatching {
+                val archiveJson = context.contentResolver.readUtf8Text(uri)
+                setlistRepository.importSetlistArchive(archiveJson).getOrThrow()
+            }.onSuccess { result ->
+                selectedSetlistId = result.setlistId
+                snackbarHostState.showSnackbar(
+                    "Loaded ${result.songCount} songs into ${result.setlistName}.",
+                )
+            }.onFailure { throwable ->
+                snackbarHostState.showSnackbar(
+                    throwable.message ?: "Couldn't load that archive.",
+                )
+            }
+        }
+    }
 
     LaunchedEffect(setlists) {
         if (setlists.isNotEmpty() && setlists.none { it.id == selectedSetlistId }) {
@@ -77,10 +113,22 @@ fun SetlistsRoute(
 
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
+            snackbarHost = {
+                SnackbarHost(snackbarHostState)
+            },
             topBar = {
                 TopAppBar(
                     title = { Text("Setlists") },
                     actions = {
+                        TextButton(
+                            onClick = {
+                                importArchiveLauncher.launch(
+                                    arrayOf("application/json", "text/plain", "*/*"),
+                                )
+                            },
+                        ) {
+                            Text("Import Setlist")
+                        }
                         FilledTonalButton(onClick = onCreateSetlist) {
                             Icon(Icons.Outlined.Add, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
@@ -103,6 +151,7 @@ fun SetlistsRoute(
                         selectedSetlistId = selectedSetlistId,
                         onSelectSetlist = { selectedSetlistId = it },
                         onOpenSetlist = onOpenSetlist,
+                        onEditSetlist = onEditSetlist,
                         modifier = Modifier
                             .width(400.dp)
                             .fillMaxHeight(),
@@ -135,10 +184,20 @@ fun SetlistsRoute(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
-                                    FilledTonalButton(onClick = { onOpenSetlist(selectedDetail?.id ?: -1L) }) {
-                                        Icon(Icons.Outlined.EditNote, contentDescription = null)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Edit Setlist")
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        FilledTonalButton(onClick = { onOpenSetlist(selectedDetail?.id ?: -1L) }) {
+                                            Icon(
+                                                Icons.AutoMirrored.Outlined.PlaylistPlay,
+                                                contentDescription = null,
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Preview")
+                                        }
+                                        FilledTonalButton(onClick = { onEditSetlist(selectedDetail?.id ?: -1L) }) {
+                                            Icon(Icons.Outlined.EditNote, contentDescription = null)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Edit Setlist")
+                                        }
                                     }
                                 }
                                 if (selectedDetail?.notes?.isNotBlank() == true) {
@@ -192,6 +251,7 @@ fun SetlistsRoute(
                     selectedSetlistId = selectedSetlistId,
                     onSelectSetlist = { selectedSetlistId = it },
                     onOpenSetlist = onOpenSetlist,
+                    onEditSetlist = onEditSetlist,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
@@ -208,6 +268,7 @@ private fun SetlistLibraryPane(
     selectedSetlistId: Long,
     onSelectSetlist: (Long) -> Unit,
     onOpenSetlist: (Long) -> Unit,
+    onEditSetlist: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -238,7 +299,10 @@ private fun SetlistLibraryPane(
                     val selected = setlist.id == selectedSetlistId
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = { onSelectSetlist(setlist.id) },
+                        onClick = {
+                            onSelectSetlist(setlist.id)
+                            onOpenSetlist(setlist.id)
+                        },
                     ) {
                         Column(
                             modifier = Modifier.padding(18.dp),
@@ -261,10 +325,10 @@ private fun SetlistLibraryPane(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                FilledTonalButton(onClick = { onOpenSetlist(setlist.id) }) {
+                                FilledTonalButton(onClick = { onEditSetlist(setlist.id) }) {
                                     Icon(Icons.Outlined.EditNote, contentDescription = null)
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Open")
+                                    Text("Edit")
                                 }
                             }
                             if (setlist.notes.isNotBlank()) {

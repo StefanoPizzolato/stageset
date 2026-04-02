@@ -2,6 +2,8 @@
 
 package com.codex.stageset.ui.setlists
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -34,6 +36,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -49,13 +53,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.codex.stageset.data.repository.SetlistArchiveDocument
 import com.codex.stageset.data.repository.SetlistDetail
 import com.codex.stageset.data.repository.SetlistDraft
 import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.data.repository.Song
 import com.codex.stageset.data.repository.SongRepository
+import com.codex.stageset.ui.common.writeUtf8Text
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -67,6 +74,7 @@ fun SetlistEditorRoute(
     setlistRepository: SetlistRepository,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
     val allSongs by songRepository.observeSongs().collectAsState(initial = emptyList())
     val existingSetlistFlow = remember(setlistId, setlistRepository) {
         if (setlistId > 0) {
@@ -77,12 +85,36 @@ fun SetlistEditorRoute(
     }
     val existingSetlist by existingSetlistFlow.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     val queuedSongIds = remember(setlistId) { mutableStateListOf<Long>() }
+    var pendingArchiveDocument by remember { mutableStateOf<SetlistArchiveDocument?>(null) }
 
     var name by rememberSaveable(setlistId) { mutableStateOf("") }
     var notes by rememberSaveable(setlistId) { mutableStateOf("") }
     var search by rememberSaveable(setlistId) { mutableStateOf("") }
     var hasHydrated by rememberSaveable(setlistId) { mutableStateOf(setlistId <= 0) }
+    val exportArchiveLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        val archiveDocument = pendingArchiveDocument
+        pendingArchiveDocument = null
+
+        if (uri == null || archiveDocument == null) {
+            return@rememberLauncherForActivityResult
+        }
+
+        scope.launch {
+            runCatching {
+                context.contentResolver.writeUtf8Text(uri, archiveDocument.json)
+            }.onSuccess {
+                snackbarHostState.showSnackbar("Archive saved.")
+            }.onFailure { throwable ->
+                snackbarHostState.showSnackbar(
+                    throwable.message ?: "Couldn't save that archive.",
+                )
+            }
+        }
+    }
 
     LaunchedEffect(existingSetlist?.id) {
         if (!hasHydrated && existingSetlist != null) {
@@ -110,10 +142,14 @@ fun SetlistEditorRoute(
     val songMap = remember(allSongs) { allSongs.associateBy { it.id } }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val wideLayout = maxWidth >= 1100.dp
+        val wideLayout = maxWidth >= 760.dp
+        val songPoolWidth = (maxWidth * 0.4f).coerceIn(320.dp, 460.dp)
 
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
+            snackbarHost = {
+                SnackbarHost(snackbarHostState)
+            },
             topBar = {
                 TopAppBar(
                     title = { Text(if (setlistId > 0) "Edit Setlist" else "New Setlist") },
@@ -124,6 +160,24 @@ fun SetlistEditorRoute(
                     },
                     actions = {
                         if (setlistId > 0) {
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        runCatching {
+                                            setlistRepository.exportSetlistArchive(setlistId).getOrThrow()
+                                        }.onSuccess { archiveDocument ->
+                                            pendingArchiveDocument = archiveDocument
+                                            exportArchiveLauncher.launch(archiveDocument.suggestedFileName)
+                                        }.onFailure { throwable ->
+                                            snackbarHostState.showSnackbar(
+                                                throwable.message ?: "Couldn't save that archive.",
+                                            )
+                                        }
+                                    }
+                                },
+                            ) {
+                                Text("Export Setlist")
+                            }
                             TextButton(
                                 onClick = {
                                     scope.launch {
@@ -175,7 +229,7 @@ fun SetlistEditorRoute(
                         onSearchChange = { search = it },
                         onAddSong = { queuedSongIds.add(it.id) },
                         modifier = Modifier
-                            .width(420.dp)
+                            .width(songPoolWidth)
                             .fillMaxHeight(),
                     )
                     SetlistQueuePane(
@@ -217,7 +271,7 @@ fun SetlistEditorRoute(
                         onAddSong = { queuedSongIds.add(it.id) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(360.dp),
+                            .weight(1f),
                     )
                     SetlistQueuePane(
                         name = name,
@@ -238,7 +292,9 @@ fun SetlistEditorRoute(
                             }
                         },
                         onRemove = { index -> queuedSongIds.removeAt(index) },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1.15f),
                     )
                 }
             }
@@ -283,7 +339,9 @@ private fun SongPoolPane(
                 leadingIcon = { Icon(Icons.Outlined.LibraryMusic, contentDescription = null) },
             )
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 itemsIndexed(
@@ -375,24 +433,32 @@ private fun SetlistQueuePane(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                        .weight(1f),
+                    verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(
-                        text = "Your running order is empty.",
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    Text(
-                        text = "Add songs from the library, then move them up or down for the live flow.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(
+                        modifier = Modifier.padding(vertical = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = "Your running order is empty.",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        Text(
+                            text = "Add songs from the library, then move them up or down for the live flow.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     itemsIndexed(
                         items = queuedSongs,

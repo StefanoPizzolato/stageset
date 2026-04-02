@@ -42,6 +42,44 @@ interface SetlistDao {
     )
     fun observeSetlistSongs(setlistId: Long): Flow<List<SetlistSongRow>>
 
+    @Query(
+        """
+        SELECT
+            setlist_songs.id AS entryId,
+            setlist_songs.songId AS songId,
+            setlist_songs.position AS position,
+            songs.name AS name,
+            songs.artist AS artist,
+            songs.preset AS preset,
+            songs.keySignature AS keySignature,
+            songs.chart AS chart
+        FROM setlist_songs
+        INNER JOIN songs ON songs.id = setlist_songs.songId
+        WHERE setlist_songs.setlistId = :setlistId
+        ORDER BY setlist_songs.position ASC, setlist_songs.id ASC
+        """,
+    )
+    fun observeSetlistPreviewSongs(setlistId: Long): Flow<List<SetlistPreviewSongRow>>
+
+    @Query(
+        """
+        SELECT
+            setlist_songs.id AS entryId,
+            setlist_songs.songId AS songId,
+            setlist_songs.position AS position,
+            songs.name AS name,
+            songs.artist AS artist,
+            songs.preset AS preset,
+            songs.keySignature AS keySignature,
+            songs.chart AS chart
+        FROM setlist_songs
+        INNER JOIN songs ON songs.id = setlist_songs.songId
+        WHERE setlist_songs.setlistId = :setlistId
+        ORDER BY setlist_songs.position ASC, setlist_songs.id ASC
+        """,
+    )
+    suspend fun getSetlistPreviewSongs(setlistId: Long): List<SetlistPreviewSongRow>
+
     @Insert
     suspend fun insertSetlist(setlist: SetlistEntity): Long
 
