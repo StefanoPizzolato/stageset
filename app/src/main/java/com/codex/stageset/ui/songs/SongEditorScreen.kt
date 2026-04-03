@@ -55,6 +55,7 @@ import com.codex.stageset.data.repository.ImportedSongDraft
 import com.codex.stageset.data.repository.SongDraft
 import com.codex.stageset.data.repository.SongRepository
 import com.codex.stageset.ui.common.ChartPreview
+import com.codex.stageset.ui.common.ConfirmActionDialog
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -86,6 +87,7 @@ fun SongEditorRoute(
     var isImporting by remember { mutableStateOf(false) }
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
     var browserImportUrl by remember { mutableStateOf<String?>(null) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     fun applyImportedSong(imported: ImportedSongDraft, message: String) {
         name = imported.name.ifBlank { name }
@@ -156,12 +158,7 @@ fun SongEditorRoute(
                     actions = {
                         if (songId > 0) {
                             TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        songRepository.deleteSong(songId)
-                                        onBack()
-                                    }
-                                },
+                                onClick = { showDeleteConfirmation = true },
                             ) {
                                 Icon(Icons.Outlined.Delete, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -296,6 +293,22 @@ fun SongEditorRoute(
                     message = "Imported chart from Ultimate Guitar browser fallback.",
                 )
             },
+        )
+    }
+
+    if (showDeleteConfirmation) {
+        ConfirmActionDialog(
+            title = "Delete song?",
+            message = "This will permanently remove this song from the library.",
+            confirmLabel = "Delete",
+            onConfirm = {
+                showDeleteConfirmation = false
+                scope.launch {
+                    songRepository.deleteSong(songId)
+                    onBack()
+                }
+            },
+            onDismiss = { showDeleteConfirmation = false },
         )
     }
 }
@@ -455,6 +468,9 @@ private fun SongForm(
                 .height(420.dp),
             label = { Text("Chart") },
             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+            supportingText = {
+                Text("Use @ ... @ blocks for melody MML, for example: @ key=Ebm meter=4/4 cleff=treble o4 l4 c d e f @")
+            },
         )
     }
 }

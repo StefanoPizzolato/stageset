@@ -1,9 +1,12 @@
 package com.codex.stageset.ui.common
 
 import com.codex.stageset.chart.ChordPlacement
+import com.codex.stageset.chart.MelodyNotation
+import com.codex.stageset.chart.MelodyParseResult
 import com.codex.stageset.chart.canonicalSectionLine
 import com.codex.stageset.chart.looksLikeChordLine
 import com.codex.stageset.chart.parseChordPlacements
+import com.codex.stageset.chart.parseMelodyNotation
 import com.codex.stageset.chart.sectionColorGroup
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -26,12 +29,15 @@ data class PreviewLine(
     val type: PreviewLineType,
     val accentSpans: List<PreviewSpan> = emptyList(),
     val sectionColorGroup: String? = null,
+    val melodyNotation: MelodyNotation? = null,
 )
 
 enum class PreviewLineType {
     Section,
     Chord,
     Lyric,
+    Melody,
+    MelodyError,
     Empty,
 }
 
@@ -77,9 +83,14 @@ private data class ChartSection(
     val header: String?,
     val normalizedHeader: String?,
     val sectionColorGroup: String?,
-    val lines: List<String>,
+    val entries: List<ChartSectionEntry>,
     val chordSignature: String,
 )
+
+private sealed interface ChartSectionEntry {
+    data class TextLine(val text: String) : ChartSectionEntry
+    data class MelodyBlock(val source: String) : ChartSectionEntry
+}
 
 private data class ChordSlotLayout(
     val slotStarts: List<Int>,
@@ -103,36 +114,72 @@ private data class RepeatMatch(
 private fun parseSections(chart: String): List<ChartSection> {
     val sections = mutableListOf<ChartSection>()
     var currentHeader: String? = null
-    var currentLines = mutableListOf<String>()
+    var currentEntries = mutableListOf<ChartSectionEntry>()
+    var inMelodyBlock = false
+    var melodyBlockLines = mutableListOf<String>()
 
     fun commitSection() {
-        if (currentHeader == null && currentLines.isEmpty()) {
+        if (currentHeader == null && currentEntries.isEmpty()) {
             return
         }
 
         val normalizedHeader = currentHeader?.removePrefix("[")?.removeSuffix("]")?.lowercase()
-        val chordSignature = buildChordSignature(currentLines)
+        val chordSignature = buildChordSignature(currentEntries)
 
         sections += ChartSection(
             header = currentHeader,
             normalizedHeader = normalizedHeader,
             sectionColorGroup = currentHeader?.let(::sectionColorGroup),
-            lines = currentLines.toList(),
+            entries = currentEntries.toList(),
             chordSignature = chordSignature,
         )
 
-        currentLines = mutableListOf()
+        currentEntries = mutableListOf()
+    }
+
+    fun commitMelodyBlock() {
+        currentEntries += ChartSectionEntry.MelodyBlock(
+            source = melodyBlockLines.joinToString("\n").trim(),
+        )
+        melodyBlockLines = mutableListOf()
+        inMelodyBlock = false
     }
 
     chart.lines().forEach { rawLine ->
         val line = rawLine.trimEnd()
+        val trimmed = line.trim()
+
+        if (inMelodyBlock) {
+            if (trimmed == "@") {
+                commitMelodyBlock()
+            } else {
+                melodyBlockLines += line
+            }
+            return@forEach
+        }
+
+        inlineMelodyBlockSource(trimmed)?.let { melodySource ->
+            currentEntries += ChartSectionEntry.MelodyBlock(melodySource)
+            return@forEach
+        }
+
+        if (trimmed == "@") {
+            inMelodyBlock = true
+            melodyBlockLines = mutableListOf()
+            return@forEach
+        }
+
         val sectionLine = canonicalSectionLine(line)
         if (sectionLine != null) {
             commitSection()
             currentHeader = sectionLine
         } else {
-            currentLines += line
+            currentEntries += ChartSectionEntry.TextLine(line)
         }
+    }
+
+    if (inMelodyBlock) {
+        commitMelodyBlock()
     }
 
     commitSection()
@@ -146,7 +193,7 @@ private fun renderSection(
     compressChords: Boolean,
     denseChordSpacing: Boolean,
 ): List<PreviewLine> {
-    if (compressChords) {
+    if (compressChords && section.entries.none { it is ChartSectionEntry.MelodyBlock }) {
         return renderCompressedChordSection(
             section = section,
             hideChordLines = hideChordLines,
@@ -156,7 +203,9 @@ private fun renderSection(
 
     val chordSlotLayout = if (!showLyrics) {
         buildChordSlotLayout(
-            section.lines.mapNotNull(::parsePreviewChordPlacements),
+            section.entries.mapNotNull { entry ->
+                (entry as? ChartSectionEntry.TextLine)?.text?.let(::parsePreviewChordPlacements)
+            },
             denseSpacing = denseChordSpacing,
         )
     } else {
@@ -174,30 +223,36 @@ private fun renderSection(
             )
         }
 
-        section.lines.forEach { line ->
-            val placements = parsePreviewChordPlacements(line)
-            when {
-                line.isBlank() -> add(PreviewLine(text = "", type = PreviewLineType.Empty))
-                placements != null && !hideChordLines -> {
-                    add(
-                        PreviewLine(
-                            text = when {
-                                showLyrics && denseChordSpacing -> renderCompactedChordLine(
-                                    placements = placements,
-                                    denseSpacing = true,
-                                )
-                                showLyrics -> line
-                                else -> renderColumnizedChordLine(
-                                    placements = placements,
-                                    slotLayout = chordSlotLayout,
-                                )
-                            },
-                            type = PreviewLineType.Chord,
-                        ),
-                    )
-                }
-                placements == null && showLyrics -> {
-                    add(PreviewLine(text = line, type = PreviewLineType.Lyric))
+        section.entries.forEach { entry ->
+            when (entry) {
+                is ChartSectionEntry.MelodyBlock -> add(buildMelodyPreviewLine(entry.source))
+                is ChartSectionEntry.TextLine -> {
+                    val line = entry.text
+                    val placements = parsePreviewChordPlacements(line)
+                    when {
+                        line.isBlank() -> add(PreviewLine(text = "", type = PreviewLineType.Empty))
+                        placements != null && !hideChordLines -> {
+                            add(
+                                PreviewLine(
+                                    text = when {
+                                        showLyrics && denseChordSpacing -> renderCompactedChordLine(
+                                            placements = placements,
+                                            denseSpacing = true,
+                                        )
+                                        showLyrics -> line
+                                        else -> renderColumnizedChordLine(
+                                            placements = placements,
+                                            slotLayout = chordSlotLayout,
+                                        )
+                                    },
+                                    type = PreviewLineType.Chord,
+                                ),
+                            )
+                        }
+                        placements == null && showLyrics -> {
+                            add(PreviewLine(text = line, type = PreviewLineType.Lyric))
+                        }
+                    }
                 }
             }
         }
@@ -224,7 +279,9 @@ private fun renderCompressedChordSection(
         if (!hideChordLines) {
             addAll(
                 buildCompressedChordPreviewLines(
-                    lines = section.lines,
+                    lines = section.entries.mapNotNull { entry ->
+                        (entry as? ChartSectionEntry.TextLine)?.text
+                    },
                     denseSpacing = denseChordSpacing,
                 ),
             )
@@ -233,12 +290,42 @@ private fun renderCompressedChordSection(
     return compactBlankLines(rendered)
 }
 
-private fun buildChordSignature(lines: List<String>): String {
-    return lines.asSequence()
+private fun buildChordSignature(entries: List<ChartSectionEntry>): String {
+    return entries.asSequence()
+        .mapNotNull { entry -> (entry as? ChartSectionEntry.TextLine)?.text }
         .mapNotNull(::parsePreviewChordPlacements)
         .flatMap { placements -> placements.asSequence().map { it.chord } }
         .joinToString(" ")
         .trim()
+}
+
+private fun inlineMelodyBlockSource(line: String): String? {
+    if (!line.startsWith("@") || !line.endsWith("@") || line.length <= 1) {
+        return null
+    }
+    return line.removePrefix("@")
+        .removeSuffix("@")
+        .trim()
+        .takeIf { it.isNotEmpty() }
+}
+
+private fun buildMelodyPreviewLine(source: String): PreviewLine {
+    return when (val result = parseMelodyNotation(source)) {
+        is MelodyParseResult.Success -> {
+            PreviewLine(
+                text = source,
+                type = PreviewLineType.Melody,
+                melodyNotation = result.notation,
+            )
+        }
+
+        is MelodyParseResult.Error -> {
+            PreviewLine(
+                text = "Melody notation error: ${result.message}",
+                type = PreviewLineType.MelodyError,
+            )
+        }
+    }
 }
 
 private fun parsePreviewChordPlacements(line: String): List<ChordPlacement>? {

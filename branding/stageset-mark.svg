@@ -1,0 +1,48 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="panel" x1="120" y1="104" x2="900" y2="952" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#172028"/>
+      <stop offset="1" stop-color="#050607"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 258) rotate(90) scale(258 288)">
+      <stop stop-color="#D7A34D" stop-opacity="0.72"/>
+      <stop offset="1" stop-color="#D7A34D" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="512" y1="152" x2="512" y2="748" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D7A34D" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#B76B3D" stop-opacity="0.28"/>
+    </linearGradient>
+    <filter id="shadow" x="242" y="187" width="548" height="655" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="22"/>
+      <feGaussianBlur stdDeviation="24"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0196078 0 0 0 0 0.0235294 0 0 0 0 0.027451 0 0 0 0.42 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_2"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_2" result="shape"/>
+    </filter>
+  </defs>
+  <rect x="96" y="96" width="832" height="832" rx="224" fill="url(#panel)"/>
+  <circle cx="512" cy="258" r="258" fill="url(#glow)"/>
+  <path d="M300 160C376 124 648 124 724 160L632 744C586 770 438 770 392 744L300 160Z" fill="url(#beam)"/>
+  <path d="M258 210C322 174 702 174 766 210" stroke="#D7A34D" stroke-width="24" stroke-linecap="round" stroke-opacity="0.62"/>
+  <circle cx="512" cy="190" r="18" fill="#B76B3D"/>
+  <ellipse cx="512" cy="808" rx="228" ry="66" fill="#050607" fill-opacity="0.34"/>
+  <g filter="url(#shadow)">
+    <g transform="rotate(-8 514 520)">
+      <rect x="366" y="296" width="284" height="388" rx="62" fill="#27323B"/>
+    </g>
+    <g transform="rotate(-8 484 486)">
+      <rect x="328" y="248" width="312" height="430" rx="68" fill="#F8F2E7"/>
+      <path d="M454 274H514C541.614 274 564 296.386 564 324V334H404V324C404 296.386 426.386 274 454 274Z" fill="#D7A34D"/>
+      <rect x="364" y="382" width="192" height="24" rx="12" fill="#536B5F"/>
+      <rect x="364" y="438" width="216" height="24" rx="12" fill="#536B5F"/>
+      <rect x="364" y="494" width="176" height="24" rx="12" fill="#536B5F"/>
+      <rect x="364" y="550" width="228" height="24" rx="12" fill="#536B5F"/>
+      <path d="M514 356V526" stroke="#D7A34D" stroke-width="26" stroke-linecap="round"/>
+      <ellipse cx="482" cy="554" rx="54" ry="42" fill="#B76B3D"/>
+      <ellipse cx="482" cy="554" rx="30" ry="20" fill="#D7A34D" fill-opacity="0.34"/>
+    </g>
+  </g>
+</svg>

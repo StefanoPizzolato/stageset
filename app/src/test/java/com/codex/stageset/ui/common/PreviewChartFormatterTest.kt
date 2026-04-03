@@ -293,6 +293,51 @@ class PreviewChartFormatterTest {
     }
 
     @Test
+    fun buildPreviewLines_inserts_melody_blocks_in_section_order() {
+        val chart = """
+            [Verse]
+            C       G
+            @
+            t120 o4 l4 c d e f
+            @
+            Sing it out
+        """.trimIndent()
+
+        val rendered = buildPreviewLines(chart)
+            .filter { it.type != PreviewLineType.Empty }
+
+        assertEquals(
+            listOf(
+                PreviewLineType.Section,
+                PreviewLineType.Chord,
+                PreviewLineType.Melody,
+                PreviewLineType.Lyric,
+            ),
+            rendered.map { it.type },
+        )
+        assertEquals(120, rendered[2].melodyNotation?.tempoBpm)
+        assertEquals(1, rendered[2].melodyNotation?.bars?.size)
+        assertEquals("Sing it out", rendered[3].text)
+    }
+
+    @Test
+    fun buildPreviewLines_surfaces_melody_parse_errors() {
+        val chart = """
+            [Verse]
+            @
+            o4 l8 c&d
+            @
+        """.trimIndent()
+
+        val rendered = buildPreviewLines(chart)
+            .filter { it.type != PreviewLineType.Empty }
+
+        assertEquals(PreviewLineType.Section, rendered[0].type)
+        assertEquals(PreviewLineType.MelodyError, rendered[1].type)
+        assertTrue(rendered[1].text.contains("Tie must join the same pitch."))
+    }
+
+    @Test
     fun splitPreviewLinesForTwoColumns_keepsSectionsGroupedInReadingOrder() {
         val chart = """
             [Intro]
