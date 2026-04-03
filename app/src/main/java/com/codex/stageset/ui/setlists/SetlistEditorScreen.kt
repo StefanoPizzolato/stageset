@@ -62,6 +62,7 @@ import com.codex.stageset.data.repository.SetlistDraft
 import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.data.repository.Song
 import com.codex.stageset.data.repository.SongRepository
+import com.codex.stageset.ui.common.ConfirmActionDialog
 import com.codex.stageset.ui.common.writeUtf8Text
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -88,6 +89,8 @@ fun SetlistEditorRoute(
     val snackbarHostState = remember { SnackbarHostState() }
     val queuedSongIds = remember(setlistId) { mutableStateListOf<Long>() }
     var pendingArchiveDocument by remember { mutableStateOf<SetlistArchiveDocument?>(null) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var pendingRemovalIndex by remember { mutableStateOf<Int?>(null) }
 
     var name by rememberSaveable(setlistId) { mutableStateOf("") }
     var notes by rememberSaveable(setlistId) { mutableStateOf("") }
@@ -179,12 +182,7 @@ fun SetlistEditorRoute(
                                 Text("Export Setlist")
                             }
                             TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        setlistRepository.deleteSetlist(setlistId)
-                                        onBack()
-                                    }
-                                },
+                                onClick = { showDeleteConfirmation = true },
                             ) {
                                 Icon(Icons.Outlined.Delete, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -250,7 +248,7 @@ fun SetlistEditorRoute(
                                 queuedSongIds.add(index + 1, item)
                             }
                         },
-                        onRemove = { index -> queuedSongIds.removeAt(index) },
+                        onRemove = { index -> pendingRemovalIndex = index },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
@@ -291,7 +289,7 @@ fun SetlistEditorRoute(
                                 queuedSongIds.add(index + 1, item)
                             }
                         },
-                        onRemove = { index -> queuedSongIds.removeAt(index) },
+                        onRemove = { index -> pendingRemovalIndex = index },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1.15f),
@@ -299,6 +297,43 @@ fun SetlistEditorRoute(
                 }
             }
         }
+    }
+
+    if (showDeleteConfirmation) {
+        ConfirmActionDialog(
+            title = "Delete setlist?",
+            message = "This will permanently remove this setlist from the library.",
+            confirmLabel = "Delete",
+            onConfirm = {
+                showDeleteConfirmation = false
+                scope.launch {
+                    setlistRepository.deleteSetlist(setlistId)
+                    onBack()
+                }
+            },
+            onDismiss = { showDeleteConfirmation = false },
+        )
+    }
+
+    pendingRemovalIndex?.let { index ->
+        val songName = queuedSongIds.getOrNull(index)
+            ?.let(songMap::get)
+            ?.name
+            .orEmpty()
+            .ifBlank { "this song" }
+        ConfirmActionDialog(
+            title = "Remove song from setlist?",
+            message = "This will remove $songName from the current running order.",
+            confirmLabel = "Remove",
+            onConfirm = {
+                val confirmedIndex = pendingRemovalIndex
+                pendingRemovalIndex = null
+                if (confirmedIndex != null && confirmedIndex in queuedSongIds.indices) {
+                    queuedSongIds.removeAt(confirmedIndex)
+                }
+            },
+            onDismiss = { pendingRemovalIndex = null },
+        )
     }
 }
 

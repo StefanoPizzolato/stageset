@@ -86,6 +86,7 @@ fun ChartPreview(
         fontSize = (textSizeSp * 0.9f).sp,
         lineHeight = (textSizeSp * 1.2f).sp,
     )
+    val notationScale = (textSizeSp / 20f).coerceIn(0.7f, 1.7f)
 
     Surface(
         modifier = modifier,
@@ -157,6 +158,7 @@ fun ChartPreview(
                                     defaultSectionColor = defaultSectionColor,
                                     chartTextStyle = chartTextStyle,
                                     sectionTextStyle = sectionTextStyle,
+                                    notationScale = notationScale,
                                     modifier = Modifier.weight(1f),
                                 )
                             }
@@ -168,6 +170,7 @@ fun ChartPreview(
                             defaultSectionColor = defaultSectionColor,
                             chartTextStyle = chartTextStyle,
                             sectionTextStyle = sectionTextStyle,
+                            notationScale = notationScale,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -184,6 +187,7 @@ private fun PreviewLinesColumn(
     defaultSectionColor: Color,
     chartTextStyle: androidx.compose.ui.text.TextStyle,
     sectionTextStyle: androidx.compose.ui.text.TextStyle,
+    notationScale: Float,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -230,6 +234,30 @@ private fun PreviewLinesColumn(
                         style = chartTextStyle,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+
+                PreviewLineType.Melody -> {
+                    line.melodyNotation?.let { notation ->
+                        MelodyStaffPreview(
+                            notation = notation,
+                            scale = notationScale,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } ?: Text(
+                        text = line.text,
+                        style = chartTextStyle,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                PreviewLineType.MelodyError -> {
+                    Text(
+                        text = line.text,
+                        style = chartTextStyle,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
 
