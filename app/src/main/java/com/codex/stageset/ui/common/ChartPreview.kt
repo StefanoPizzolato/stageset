@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -142,7 +143,7 @@ fun ChartPreview(
                         )
                     } else if (previewLines.isEmpty()) {
                         Text(
-                            text = "No section markers or chord lines are visible with the current preview settings.",
+                            text = "No chart content is visible with the current preview settings.",
                             style = chartTextStyle,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -208,13 +209,15 @@ private fun PreviewLinesColumn(
                 }
 
                 PreviewLineType.Chord -> {
+                    val sectionChordColor = line.sectionColorGroup?.let(sectionHeadingColors::get)
+                    val chordColor = sectionChordColor ?: MaterialTheme.colorScheme.primary
                     Text(
                         text = buildAnnotatedString {
                             append(line.text)
                             line.accentSpans.forEach { span ->
                                 addStyle(
                                     SpanStyle(
-                                        color = MaterialTheme.colorScheme.secondary,
+                                        color = sectionChordColor ?: MaterialTheme.colorScheme.secondary,
                                         fontWeight = FontWeight.SemiBold,
                                     ),
                                     start = span.start,
@@ -224,7 +227,7 @@ private fun PreviewLinesColumn(
                         },
                         style = chartTextStyle,
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = chordColor,
                     )
                 }
 
@@ -234,6 +237,15 @@ private fun PreviewLinesColumn(
                         style = chartTextStyle,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+
+                PreviewLineType.LyricCue -> {
+                    Text(
+                        text = line.text,
+                        style = chartTextStyle,
+                        fontStyle = FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 

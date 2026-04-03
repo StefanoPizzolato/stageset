@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.asStateFlow
 
 data class PreviewSettings(
     val showLyrics: Boolean = true,
+    val showLyricsCue: Boolean = false,
+    val showChords: Boolean = true,
+    val showNotation: Boolean = true,
     val hideRepeatedSectionChords: Boolean = false,
     val compressChords: Boolean = false,
     val colorizeSectionHeadings: Boolean = false,
@@ -21,6 +24,18 @@ class PreviewSettingsRepository(context: Context) {
 
     fun setShowLyrics(showLyrics: Boolean) {
         updateSettings { it.copy(showLyrics = showLyrics) }
+    }
+
+    fun setShowLyricsCue(showLyricsCue: Boolean) {
+        updateSettings { it.copy(showLyricsCue = showLyricsCue) }
+    }
+
+    fun setShowChords(showChords: Boolean) {
+        updateSettings { it.copy(showChords = showChords) }
+    }
+
+    fun setShowNotation(showNotation: Boolean) {
+        updateSettings { it.copy(showNotation = showNotation) }
     }
 
     fun setHideRepeatedSectionChords(hideRepeatedSectionChords: Boolean) {
@@ -43,6 +58,9 @@ class PreviewSettingsRepository(context: Context) {
         val updated = transform(_settings.value)
         preferences.edit()
             .putBoolean(KeyShowLyrics, updated.showLyrics)
+            .putBoolean(KeyShowLyricsCue, updated.showLyricsCue)
+            .putBoolean(KeyShowChords, updated.showChords)
+            .putBoolean(KeyShowNotation, updated.showNotation)
             .putBoolean(KeyHideRepeatedSectionChords, updated.hideRepeatedSectionChords)
             .putBoolean(KeyCompressChords, updated.compressChords)
             .putBoolean(KeyColorizeSectionHeadings, updated.colorizeSectionHeadings)
@@ -54,6 +72,9 @@ class PreviewSettingsRepository(context: Context) {
     private fun readSettings(): PreviewSettings {
         return PreviewSettings(
             showLyrics = preferences.getBoolean(KeyShowLyrics, true),
+            showLyricsCue = preferences.getBoolean(KeyShowLyricsCue, false),
+            showChords = preferences.getBoolean(KeyShowChords, true),
+            showNotation = preferences.getBoolean(KeyShowNotation, true),
             hideRepeatedSectionChords = preferences.getBoolean(KeyHideRepeatedSectionChords, false),
             compressChords = preferences.getBoolean(KeyCompressChords, false),
             colorizeSectionHeadings = preferences.getBoolean(KeyColorizeSectionHeadings, false),
@@ -63,6 +84,9 @@ class PreviewSettingsRepository(context: Context) {
 
     private companion object {
         const val KeyShowLyrics = "show_lyrics"
+        const val KeyShowLyricsCue = "show_lyrics_cue"
+        const val KeyShowChords = "show_chords"
+        const val KeyShowNotation = "show_notation"
         const val KeyHideRepeatedSectionChords = "hide_repeated_section_chords"
         const val KeyCompressChords = "compress_chords"
         const val KeyColorizeSectionHeadings = "colorize_section_headings"

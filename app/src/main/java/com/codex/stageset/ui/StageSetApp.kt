@@ -160,7 +160,7 @@ fun StageSetApp(
                         previewSettingsRepository = previewSettingsRepository,
                         setlistRepository = setlistRepository,
                         onBack = { navController.popBackStack() },
-                        onEditSetlist = { setlistId -> navController.navigate(Routes.setlistEditor(setlistId)) },
+                        onEditSong = { songId -> navController.navigate(Routes.songEditor(songId)) },
                     )
                 }
                 composable(

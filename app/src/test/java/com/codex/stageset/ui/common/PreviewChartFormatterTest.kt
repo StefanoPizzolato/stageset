@@ -134,6 +134,143 @@ class PreviewChartFormatterTest {
     }
 
     @Test
+    fun buildPreviewLines_hidesRepeatedNumberedSectionFamiliesWhenChordsMatch() {
+        val chart = """
+            [Chorus 1]
+            C       G
+            Am     F
+            First chorus
+
+            [Verse]
+            Em      D
+            Something else
+
+            [Chorus 2]
+            C   G
+            Am        F
+            Second chorus
+        """.trimIndent()
+
+        assertEquals(
+            """
+            [Chorus 1]
+            C       G
+            Am     F
+            First chorus
+
+            [Verse]
+            Em      D
+            Something else
+
+            [Chorus 2]
+            Second chorus
+            """.trimIndent(),
+            buildPreviewLines(
+                chart = chart,
+                options = PreviewRenderOptions(
+                    showLyrics = true,
+                    hideRepeatedSectionChords = true,
+                ),
+            ).joinToString("\n") { it.text },
+        )
+    }
+
+    @Test
+    fun buildPreviewLines_compressModeHidesRepeatedNumberedSectionFamiliesInChordOnlyPreview() {
+        val chart = """
+            [Verse 1]
+            Ebm    Ab7
+            Gb     Bb7
+
+            [Verse 2]
+            Ebm Ab7
+            Gb  Bb7
+        """.trimIndent()
+
+        assertEquals(
+            """
+            [Verse 1]
+            Ebm    Ab7    Gb    Bb7
+
+            [Verse 2]
+            """.trimIndent(),
+            buildPreviewLines(
+                chart = chart,
+                options = PreviewRenderOptions(
+                    showLyrics = false,
+                    compressChords = true,
+                ),
+            ).joinToString("\n") { it.text },
+        )
+    }
+
+    @Test
+    fun buildPreviewLines_hidesRepeatedSectionChordsEvenWhenMelodyBlocksDiffer() {
+        val chart = """
+            [Chorus 1]
+            C       G
+            @
+            o4 l4 c d
+            @
+            First chorus
+
+            [Chorus 2]
+            C   G
+            @
+            o4 l4 e f
+            @
+            Second chorus
+        """.trimIndent()
+
+        assertEquals(
+            """
+            [Chorus 1]
+            C       G
+            o4 l4 c d
+            First chorus
+
+            [Chorus 2]
+            o4 l4 e f
+            Second chorus
+            """.trimIndent(),
+            buildPreviewLines(
+                chart = chart,
+                options = PreviewRenderOptions(
+                    showLyrics = true,
+                    hideRepeatedSectionChords = true,
+                ),
+            ).joinToString("\n") { it.text },
+        )
+    }
+
+    @Test
+    fun buildPreviewLines_compressModeStillCompressesSectionsThatContainMelodyBlocks() {
+        val chart = """
+            [Verse]
+            F      Am
+            F      Am
+            @
+            o4 l4 c d
+            @
+        """.trimIndent()
+
+        assertEquals(
+            """
+            [Verse]
+            :F  Am: x2
+            o4 l4 c d
+            """.trimIndent(),
+            buildPreviewLines(
+                chart = chart,
+                options = PreviewRenderOptions(
+                    showLyrics = false,
+                    compressChords = true,
+                ),
+            ).joinToString("\n") { it.text },
+        )
+    }
+
+    @Test
     fun buildPreviewLines_canCompressRepeatedChordRuns() {
         val chart = """
             [Verse]
@@ -179,6 +316,37 @@ class PreviewChartFormatterTest {
                 options = PreviewRenderOptions(
                     showLyrics = false,
                     compressChords = true,
+                ),
+            ).joinToString("\n") { it.text },
+        )
+    }
+
+    @Test
+    fun buildPreviewLines_compressesAcrossHiddenLyricBreaksWithinASection() {
+        val chart = """
+            [Chorus 1]
+                         EbmAb7 Ebm         Ab7
+            I wish those days, could, come back once more,
+                          EbmAb7Ebm     Ab7
+            Why did those days, e   -ver have to go?
+            
+                         EbmAb7 Ebm         Ab7
+            I wish those days, could, come back once more,
+                          EbmAb7Ebm     Ab7               Ebm
+            Why did those days, e   -ver have to go? 'Cos I love them so.
+        """.trimIndent()
+
+        assertEquals(
+            """
+            [Chorus 1]
+            :Ebm    Ab7: x8   Ebm
+            """.trimIndent(),
+            buildPreviewLines(
+                chart = chart,
+                options = PreviewRenderOptions(
+                    showLyrics = false,
+                    compressChords = true,
+                    hideRepeatedSectionChords = true,
                 ),
             ).joinToString("\n") { it.text },
         )
@@ -268,6 +436,155 @@ class PreviewChartFormatterTest {
             .map { it.sectionColorGroup }
 
         assertEquals(listOf("verse", "chorus", "verse"), sectionGroups)
+    }
+
+    @Test
+    fun buildPreviewLines_appliesSectionColorGroupToChordLines() {
+        val chart = """
+            [Verse 1]
+            C   G
+            first line
+
+            [Verse 2]
+            Dm   Am
+            second line
+        """.trimIndent()
+
+        val chordGroups = buildPreviewLines(chart)
+            .filter { it.type == PreviewLineType.Chord }
+            .map { it.sectionColorGroup }
+
+        assertEquals(listOf("verse", "verse"), chordGroups)
+    }
+
+    @Test
+    fun buildPreviewLines_appliesSectionColorGroupToCompressedChordLines() {
+        val chart = """
+            [Bridge 1]
+            Ebm    Ab7
+            Gb     Bb7
+        """.trimIndent()
+
+        val chordLines = buildPreviewLines(
+            chart = chart,
+            options = PreviewRenderOptions(
+                showLyrics = false,
+                compressChords = true,
+            ),
+        ).filter { it.type == PreviewLineType.Chord }
+
+        assertEquals(1, chordLines.size)
+        assertEquals("bridge", chordLines.single().sectionColorGroup)
+    }
+
+    @Test
+    fun buildPreviewLines_canHideChordLinesWhileKeepingOtherVisibleContent() {
+        val chart = """
+            [Verse]
+            C       G
+            @
+            o4 l4 c d
+            @
+            Sing it out
+        """.trimIndent()
+
+        val rendered = buildPreviewLines(
+            chart = chart,
+            options = PreviewRenderOptions(
+                showChords = false,
+            ),
+        ).filter { it.type != PreviewLineType.Empty }
+
+        assertEquals(
+            listOf(
+                PreviewLineType.Section,
+                PreviewLineType.Melody,
+                PreviewLineType.Lyric,
+            ),
+            rendered.map { it.type },
+        )
+    }
+
+    @Test
+    fun buildPreviewLines_canHideNotationWhileKeepingChordLines() {
+        val chart = """
+            [Verse]
+            C       G
+            @
+            o4 l4 c d
+            @
+            Sing it out
+        """.trimIndent()
+
+        val rendered = buildPreviewLines(
+            chart = chart,
+            options = PreviewRenderOptions(
+                showNotation = false,
+            ),
+        ).filter { it.type != PreviewLineType.Empty }
+
+        assertEquals(
+            listOf(
+                PreviewLineType.Section,
+                PreviewLineType.Chord,
+                PreviewLineType.Lyric,
+            ),
+            rendered.map { it.type },
+        )
+    }
+
+    @Test
+    fun buildPreviewLines_canShowLyricsCueFromFirstFourWordsOfSection() {
+        val chart = """
+            [Verse]
+            C       G
+            Amazing grace how sweet the sound
+            That saved a wretch like me
+        """.trimIndent()
+
+        val rendered = buildPreviewLines(
+            chart = chart,
+            options = PreviewRenderOptions(
+                showLyricsCue = true,
+            ),
+        ).filter { it.type != PreviewLineType.Empty }
+
+        assertEquals(
+            listOf(
+                PreviewLineType.Section,
+                PreviewLineType.LyricCue,
+                PreviewLineType.Chord,
+                PreviewLineType.Lyric,
+                PreviewLineType.Lyric,
+            ),
+            rendered.map { it.type },
+        )
+        assertEquals("Amazing grace how sweet...", rendered[1].text)
+    }
+
+    @Test
+    fun buildPreviewLines_canShowLyricsCueInCompressedChordPreview() {
+        val chart = """
+            [Verse]
+            F      Am
+            Amazing grace how sweet the sound
+        """.trimIndent()
+
+        assertEquals(
+            """
+            [Verse]
+            Amazing grace how sweet...
+            F  Am
+            """.trimIndent(),
+            buildPreviewLines(
+                chart = chart,
+                options = PreviewRenderOptions(
+                    showLyrics = false,
+                    showLyricsCue = true,
+                    compressChords = true,
+                ),
+            ).joinToString("\n") { it.text },
+        )
     }
 
     @Test

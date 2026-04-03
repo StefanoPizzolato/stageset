@@ -1,15 +1,27 @@
 package com.codex.stageset.ui.common
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
@@ -53,6 +65,9 @@ fun PreviewSettingsDialog(
     settings: PreviewSettings,
     onDismiss: () -> Unit,
     onShowLyricsChange: (Boolean) -> Unit,
+    onShowLyricsCueChange: (Boolean) -> Unit,
+    onShowChordsChange: (Boolean) -> Unit,
+    onShowNotationChange: (Boolean) -> Unit,
     onHideRepeatedSectionChordsChange: (Boolean) -> Unit,
     onCompressChordsChange: (Boolean) -> Unit,
     onColorizeSectionHeadingsChange: (Boolean) -> Unit,
@@ -82,6 +97,24 @@ fun PreviewSettingsDialog(
                     description = "Turn this off to keep only section labels and chord lines in the live view.",
                     checked = settings.showLyrics,
                     onCheckedChange = onShowLyricsChange,
+                )
+                PreviewSettingsRow(
+                    title = "Show lyrics cue",
+                    description = "Show the first four lyric words from each section as a short reminder line followed by ellipsis.",
+                    checked = settings.showLyricsCue,
+                    onCheckedChange = onShowLyricsCueChange,
+                )
+                PreviewSettingsRow(
+                    title = "Show chords",
+                    description = "Turn this off to hide chord lines while keeping section titles, lyrics, and notation that are still enabled.",
+                    checked = settings.showChords,
+                    onCheckedChange = onShowChordsChange,
+                )
+                PreviewSettingsRow(
+                    title = "Show notation",
+                    description = "Turn this off to hide staff notation blocks written with @ ... @ in the chart.",
+                    checked = settings.showNotation,
+                    onCheckedChange = onShowNotationChange,
                 )
                 PreviewSettingsRow(
                     title = "Hide repeated section chords",
@@ -152,22 +185,47 @@ private fun PreviewSettingsRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    var showHelp by remember(title) { mutableStateOf(false) }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Box {
+                IconButton(
+                    onClick = { showHelp = true },
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = "About $title",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                DropdownMenu(
+                    expanded = showHelp,
+                    onDismissRequest = { showHelp = false },
+                ) {
+                    Text(
+                        text = description,
+                        modifier = Modifier
+                            .widthIn(max = 280.dp)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
         }
         Switch(
             checked = checked,
