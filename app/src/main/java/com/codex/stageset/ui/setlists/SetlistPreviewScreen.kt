@@ -71,8 +71,10 @@ fun SetlistPreviewRoute(
     setlistId: Long,
     previewSettingsRepository: PreviewSettingsRepository,
     setlistRepository: SetlistRepository,
+    restoredSongIndex: Int? = null,
+    onRestoreSongIndexConsumed: () -> Unit = {},
     onBack: () -> Unit,
-    onEditSong: (Long) -> Unit,
+    onEditSong: (Long, Int) -> Unit,
 ) {
     val setlistFlow = remember(setlistId, setlistRepository) {
         if (setlistId > 0) {
@@ -100,6 +102,16 @@ fun SetlistPreviewRoute(
     }
 
     val songs = setlist?.songs.orEmpty()
+
+    LaunchedEffect(restoredSongIndex, songs.size) {
+        val targetSongIndex = restoredSongIndex ?: return@LaunchedEffect
+        if (songs.isEmpty()) {
+            return@LaunchedEffect
+        }
+
+        currentSongIndex = targetSongIndex.coerceIn(0, songs.lastIndex)
+        onRestoreSongIndexConsumed()
+    }
     val currentSong = songs.getOrNull(currentSongIndex)
     val previousSong = songs.getOrNull(currentSongIndex - 1)
     val nextSong = songs.getOrNull(currentSongIndex + 1)
@@ -192,7 +204,7 @@ fun SetlistPreviewRoute(
                             Icon(Icons.Outlined.Tune, contentDescription = "Preview settings")
                         }
                         currentSong?.let {
-                            FilledTonalButton(onClick = { onEditSong(it.songId) }) {
+                            FilledTonalButton(onClick = { onEditSong(it.songId, currentSongIndex) }) {
                                 Icon(Icons.Outlined.Edit, contentDescription = "Edit song")
                             }
                         }
@@ -235,6 +247,13 @@ fun SetlistPreviewRoute(
                                 .padding(horizontal = sidePadding, vertical = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
+                            val previousSongTitle = previousSong?.let {
+                                buildPreviewTitle(it.preset, it.keySignature, it.name)
+                            } ?: AnnotatedString("")
+                            val nextSongTitle = nextSong?.let {
+                                buildPreviewTitle(it.preset, it.keySignature, it.name)
+                            } ?: AnnotatedString("")
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -242,61 +261,33 @@ fun SetlistPreviewRoute(
                                 PlayTransportButton(
                                     onClick = { currentSongIndex-- },
                                     enabled = canGoBack,
+                                    directionLabel = "Back",
+                                    songTitle = previousSongTitle,
+                                    iconBeforeLabel = true,
                                     modifier = Modifier
                                         .weight(1f),
                                 ) {
                                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
-                                    Text(text = "Back", modifier = Modifier.padding(start = 10.dp))
                                 }
                                 PlayTransportButton(
                                     onClick = { currentSongIndex++ },
                                     enabled = canGoForward,
+                                    directionLabel = "Forward",
+                                    songTitle = nextSongTitle,
+                                    iconBeforeLabel = false,
                                     modifier = Modifier
                                         .weight(1f),
                                 ) {
-                                    Text(text = "Forward", modifier = Modifier.padding(end = 10.dp))
                                     Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
                                 }
                             }
-                            Box(
+                            Text(
+                                text = "${currentSongIndex + 1} / ${songs.size}",
                                 modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    text = "${currentSongIndex + 1} / ${songs.size}",
-                                    modifier = Modifier.align(Alignment.Center),
-                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = previousSong?.let {
-                                            buildPreviewTitle(it.preset, it.keySignature, it.name)
-                                        } ?: AnnotatedString(""),
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        text = nextSong?.let {
-                                            buildPreviewTitle(it.preset, it.keySignature, it.name)
-                                        } ?: AnnotatedString(""),
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
 
                             ChartPreview(
                                 title = currentSong?.name.orEmpty(),
@@ -346,15 +337,45 @@ fun SetlistPreviewRoute(
 private fun PlayTransportButton(
     onClick: () -> Unit,
     enabled: Boolean,
+    directionLabel: String,
+    songTitle: AnnotatedString,
+    iconBeforeLabel: Boolean,
     modifier: Modifier = Modifier,
-    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+    icon: @Composable () -> Unit,
 ) {
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.height(72.dp),
+        modifier = modifier.height(92.dp),
     ) {
-        content()
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (iconBeforeLabel) {
+                    icon()
+                    Text(text = directionLabel, modifier = Modifier.padding(start = 8.dp))
+                } else {
+                    Text(text = directionLabel, modifier = Modifier.padding(end = 8.dp))
+                    icon()
+                }
+            }
+            Text(
+                text = songTitle,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+            )
+        }
     }
 }
 

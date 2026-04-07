@@ -56,14 +56,34 @@ fun buildPreviewLines(
     val sections = parseSections(chart)
     val compressChordOnly = options.compressChords && options.showChords && !options.showLyrics
     val shouldCollapseRepeatedSections = options.hideRepeatedSectionChords || compressChordOnly
-    val seenChordSignatures = mutableMapOf<String, MutableSet<String>>()
+    val seenChordLineSequences = mutableMapOf<String, MutableList<List<String>>>()
     val renderedSections = sections.mapNotNull { section ->
-        val shouldHideChords = shouldCollapseRepeatedSections &&
+        val hiddenLeadingChordLines = if (
+            shouldCollapseRepeatedSections &&
             section.repeatFamilyKey != null &&
-            section.chordSignature.isNotBlank() &&
-            !seenChordSignatures
-                .getOrPut(section.repeatFamilyKey) { mutableSetOf() }
-                .add(section.chordSignature)
+            section.chordLineSignatures.isNotEmpty()
+        ) {
+            seenChordLineSequences[section.repeatFamilyKey]
+                ?.maxOfOrNull { previous ->
+                    matchingLeadingChordLineCount(
+                        previous = previous,
+                        current = section.chordLineSignatures,
+                    )
+                }
+                ?: 0
+        } else {
+            0
+        }
+
+        if (
+            shouldCollapseRepeatedSections &&
+            section.repeatFamilyKey != null &&
+            section.chordLineSignatures.isNotEmpty()
+        ) {
+            seenChordLineSequences
+                .getOrPut(section.repeatFamilyKey) { mutableListOf() }
+                .add(section.chordLineSignatures)
+        }
 
         renderSection(
             section = section,
@@ -71,7 +91,7 @@ fun buildPreviewLines(
             showLyricsCue = options.showLyricsCue,
             showChords = options.showChords,
             showNotation = options.showNotation,
-            hideChordLines = shouldHideChords,
+            hiddenLeadingChordLines = hiddenLeadingChordLines,
             compressChords = compressChordOnly,
             denseChordSpacing = options.twoColumns,
         ).takeIf { it.isNotEmpty() }
@@ -94,7 +114,7 @@ private data class ChartSection(
     val repeatFamilyKey: String?,
     val sectionColorGroup: String?,
     val entries: List<ChartSectionEntry>,
-    val chordSignature: String,
+    val chordLineSignatures: List<String>,
 )
 
 private sealed interface ChartSectionEntry {
@@ -134,7 +154,7 @@ private fun parseSections(chart: String): List<ChartSection> {
         }
 
         val normalizedHeader = currentHeader?.removePrefix("[")?.removeSuffix("]")?.lowercase()
-        val chordSignature = buildChordSignature(currentEntries)
+        val chordLineSignatures = buildChordLineSignatures(currentEntries)
         val sectionFamilyKey = currentHeader?.let(::sectionColorGroup) ?: normalizedHeader
 
         sections += ChartSection(
@@ -143,7 +163,7 @@ private fun parseSections(chart: String): List<ChartSection> {
             repeatFamilyKey = sectionFamilyKey,
             sectionColorGroup = currentHeader?.let(::sectionColorGroup),
             entries = currentEntries.toList(),
-            chordSignature = chordSignature,
+            chordLineSignatures = chordLineSignatures,
         )
 
         currentEntries = mutableListOf()
@@ -204,7 +224,7 @@ private fun renderSection(
     showLyricsCue: Boolean,
     showChords: Boolean,
     showNotation: Boolean,
-    hideChordLines: Boolean,
+    hiddenLeadingChordLines: Int,
     compressChords: Boolean,
     denseChordSpacing: Boolean,
 ): List<PreviewLine> {
@@ -213,7 +233,7 @@ private fun renderSection(
             section = section,
             showLyricsCue = showLyricsCue,
             showNotation = showNotation,
-            hideChordLines = hideChordLines,
+            hiddenLeadingChordLines = hiddenLeadingChordLines,
             denseChordSpacing = denseChordSpacing,
         )
     }
@@ -230,6 +250,8 @@ private fun renderSection(
     }
 
     val rendered = buildList {
+        var chordLineIndex = 0
+
         section.header?.let {
             add(
                 PreviewLine(
@@ -257,26 +279,31 @@ private fun renderSection(
                     val placements = parsePreviewChordPlacements(line)
                     when {
                         line.isBlank() -> add(PreviewLine(text = "", type = PreviewLineType.Empty))
-                        placements != null && showChords && !hideChordLines -> {
-                            add(
-                                PreviewLine(
-                                    text = when {
-                                        showLyrics && denseChordSpacing -> renderCompactedChordLine(
-                                            placements = placements,
-                                            denseSpacing = true,
-                                        )
-                                        showLyrics -> line
-                                        else -> renderColumnizedChordLine(
-                                            placements = placements,
-                                            slotLayout = chordSlotLayout,
-                                        )
-                                    },
-                                    type = PreviewLineType.Chord,
-                                    sectionColorGroup = section.sectionColorGroup,
-                                ),
-                            )
+                        placements != null -> {
+                            val shouldRenderChordLine = showChords &&
+                                chordLineIndex >= hiddenLeadingChordLines
+                            if (shouldRenderChordLine) {
+                                add(
+                                    PreviewLine(
+                                        text = when {
+                                            showLyrics && denseChordSpacing -> renderCompactedChordLine(
+                                                placements = placements,
+                                                denseSpacing = true,
+                                            )
+                                            showLyrics -> line
+                                            else -> renderColumnizedChordLine(
+                                                placements = placements,
+                                                slotLayout = chordSlotLayout,
+                                            )
+                                        },
+                                        type = PreviewLineType.Chord,
+                                        sectionColorGroup = section.sectionColorGroup,
+                                    ),
+                                )
+                            }
+                            chordLineIndex++
                         }
-                        placements == null && showLyrics -> {
+                        showLyrics -> {
                             add(PreviewLine(text = line, type = PreviewLineType.Lyric))
                         }
                     }
@@ -292,25 +319,24 @@ private fun renderCompressedChordSection(
     section: ChartSection,
     showLyricsCue: Boolean,
     showNotation: Boolean,
-    hideChordLines: Boolean,
+    hiddenLeadingChordLines: Int,
     denseChordSpacing: Boolean,
 ): List<PreviewLine> {
     val rendered = buildList {
         val pendingChordLines = mutableListOf<String>()
+        var chordLineIndex = 0
 
         fun flushPendingChordLines() {
             if (pendingChordLines.isEmpty()) {
                 return
             }
-            if (!hideChordLines) {
-                addAll(
-                    buildCompressedChordPreviewLines(
-                        lines = pendingChordLines.toList(),
-                        denseSpacing = denseChordSpacing,
-                        sectionColorGroup = section.sectionColorGroup,
-                    ),
-                )
-            }
+            addAll(
+                buildCompressedChordPreviewLines(
+                    lines = pendingChordLines.toList(),
+                    denseSpacing = denseChordSpacing,
+                    sectionColorGroup = section.sectionColorGroup,
+                ),
+            )
             pendingChordLines.clear()
         }
 
@@ -341,7 +367,10 @@ private fun renderCompressedChordSection(
                 is ChartSectionEntry.TextLine -> {
                     val placements = parsePreviewChordPlacements(entry.text)
                     if (placements != null) {
-                        pendingChordLines += entry.text
+                        if (chordLineIndex >= hiddenLeadingChordLines) {
+                            pendingChordLines += entry.text
+                        }
+                        chordLineIndex++
                     }
                 }
             }
@@ -352,13 +381,26 @@ private fun renderCompressedChordSection(
     return compactBlankLines(rendered)
 }
 
-private fun buildChordSignature(entries: List<ChartSectionEntry>): String {
+private fun buildChordLineSignatures(entries: List<ChartSectionEntry>): List<String> {
     return entries.asSequence()
         .mapNotNull { entry -> (entry as? ChartSectionEntry.TextLine)?.text }
         .mapNotNull(::parsePreviewChordPlacements)
-        .flatMap { placements -> placements.asSequence().map { it.chord } }
-        .joinToString(" ")
-        .trim()
+        .map { placements ->
+            placements.joinToString(" ") { placement -> placement.chord }
+        }
+        .toList()
+}
+
+private fun matchingLeadingChordLineCount(
+    previous: List<String>,
+    current: List<String>,
+): Int {
+    val maxComparableLines = minOf(previous.size, current.size)
+    var matchCount = 0
+    while (matchCount < maxComparableLines && previous[matchCount] == current[matchCount]) {
+        matchCount++
+    }
+    return matchCount
 }
 
 private fun buildLyricsCue(entries: List<ChartSectionEntry>): String? {

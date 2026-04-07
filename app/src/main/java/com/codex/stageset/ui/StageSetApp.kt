@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -60,10 +61,23 @@ private object Routes {
     const val SetlistEditor = "setlist-editor"
 
     fun songPreview(songId: Long) = "$SongPreview/$songId"
-    fun songEditor(songId: Long = -1L) = "$SongEditor/$songId"
+    fun songEditor(
+        songId: Long = -1L,
+        sourceSongIndex: Int? = null,
+    ): String {
+        val baseRoute = "$SongEditor/$songId"
+        return if (sourceSongIndex == null) {
+            baseRoute
+        } else {
+            "$baseRoute?sourceSongIndex=$sourceSongIndex"
+        }
+    }
+
     fun setlistPreview(setlistId: Long) = "$SetlistPreview/$setlistId"
     fun setlistEditor(setlistId: Long = -1L) = "$SetlistEditor/$setlistId"
 }
+
+private const val RestorePlaySongIndexKey = "restore_play_song_index"
 
 @Composable
 fun StageSetApp(
@@ -126,17 +140,29 @@ fun StageSetApp(
                     )
                 }
                 composable(
-                    route = "${Routes.SongEditor}/{songId}",
+                    route = "${Routes.SongEditor}/{songId}?sourceSongIndex={sourceSongIndex}",
                     arguments = listOf(
                         navArgument("songId") {
                             type = NavType.LongType
                         },
+                        navArgument("sourceSongIndex") {
+                            type = NavType.IntType
+                            defaultValue = -1
+                        },
                     ),
                 ) { backStack ->
+                    val sourceSongIndex = backStack.arguments?.getInt("sourceSongIndex") ?: -1
                     SongEditorRoute(
                         songId = backStack.arguments?.getLong("songId") ?: -1L,
                         songRepository = songRepository,
-                        onBack = { navController.popBackStack() },
+                        onBack = {
+                            if (sourceSongIndex >= 0) {
+                                navController.previousBackStackEntry
+                                    ?.savedStateHandle
+                                    ?.set(RestorePlaySongIndexKey, sourceSongIndex)
+                            }
+                            navController.popBackStack()
+                        },
                     )
                 }
                 composable(Routes.Setlists) {
@@ -155,12 +181,26 @@ fun StageSetApp(
                         },
                     ),
                 ) { backStack ->
+                    val restoredSongIndex by backStack.savedStateHandle
+                        .getStateFlow(RestorePlaySongIndexKey, -1)
+                        .collectAsState()
                     SetlistPreviewRoute(
                         setlistId = backStack.arguments?.getLong("setlistId") ?: -1L,
                         previewSettingsRepository = previewSettingsRepository,
                         setlistRepository = setlistRepository,
+                        restoredSongIndex = restoredSongIndex.takeIf { it >= 0 },
+                        onRestoreSongIndexConsumed = {
+                            backStack.savedStateHandle[RestorePlaySongIndexKey] = -1
+                        },
                         onBack = { navController.popBackStack() },
-                        onEditSong = { songId -> navController.navigate(Routes.songEditor(songId)) },
+                        onEditSong = { songId, songIndex ->
+                            navController.navigate(
+                                Routes.songEditor(
+                                    songId = songId,
+                                    sourceSongIndex = songIndex,
+                                ),
+                            )
+                        },
                     )
                 }
                 composable(

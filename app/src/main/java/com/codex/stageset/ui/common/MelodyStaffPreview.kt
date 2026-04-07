@@ -76,7 +76,7 @@ fun MelodyStaffPreview(
                 )
             }
             val lineSpacingDp = 12f
-            val rowTopPaddingDp = 18f
+            val rowTopPaddingDp = 28f
             val rowBottomPaddingDp = 24f
             val rowHeightDp = rowTopPaddingDp + (lineSpacingDp * 4f) + rowBottomPaddingDp
             val rowGapDp = 2f
@@ -822,15 +822,19 @@ private fun DrawScope.drawStandaloneNote(
             strokeWidth = stemThickness,
             cap = StrokeCap.Round,
         )
-        standaloneFlagGlyphFor(
-            duration = note.note.duration,
-            stemUp = stemUp,
-        )?.let { glyph ->
+        val flagGlyph = standaloneFlagGlyph(stemUp = stemUp)
+        val flagCount = standaloneFlagCount(note.note.duration)
+        val flagStackOffset = lineSpacing * 0.58f
+        repeat(flagCount) { flagIndex ->
             val layout = layoutGlyphAtOrigin(
                 paint = flagPaint,
-                glyph = glyph,
+                glyph = flagGlyph,
                 originX = stemX - (stemThickness / 2f),
-                originY = stemEndY,
+                originY = if (stemUp) {
+                    stemEndY + (flagStackOffset * flagIndex)
+                } else {
+                    stemEndY - (flagStackOffset * flagIndex)
+                },
             )
             drawGlyph(layout, flagPaint)
         }
@@ -1203,15 +1207,20 @@ private fun noteheadGlyphFor(duration: MelodyDuration): String {
     }
 }
 
-private fun standaloneFlagGlyphFor(
-    duration: MelodyDuration,
+private fun standaloneFlagGlyph(
     stemUp: Boolean,
-): String? {
+): String {
+    return if (stemUp) smuflGlyph(0xE240) else smuflGlyph(0xE241)
+}
+
+private fun standaloneFlagCount(
+    duration: MelodyDuration,
+): Int {
     return when (duration.denominator) {
-        8 -> if (stemUp) smuflGlyph(0xE240) else smuflGlyph(0xE241)
-        16 -> if (stemUp) smuflGlyph(0xE242) else smuflGlyph(0xE243)
-        32 -> if (stemUp) smuflGlyph(0xE244) else smuflGlyph(0xE245)
-        else -> null
+        8 -> 1
+        16 -> 2
+        32 -> 3
+        else -> 0
     }
 }
 

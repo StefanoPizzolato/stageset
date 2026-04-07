@@ -244,6 +244,48 @@ class PreviewChartFormatterTest {
     }
 
     @Test
+    fun buildPreviewLines_hidesRepeatedLeadingChordLinesWithinMatchingSectionFamily() {
+        val chart = """
+            [Pre-Chorus]
+            Ebm            Db             B
+            And now we're flyin' through the stars
+                    Db             Ebm
+            I hope this night will last forever
+
+            [Pre-Chorus]
+            Ebm            Db             B
+            And now we're flyin' through the stars
+                    Db             Ebm
+            I hope this night will last forever
+            Ebm
+            Oh oh oh oh
+        """.trimIndent()
+
+        assertEquals(
+            """
+            [Pre-Chorus]
+            Ebm            Db             B
+            And now we're flyin' through the stars
+                    Db             Ebm
+            I hope this night will last forever
+
+            [Pre-Chorus]
+            And now we're flyin' through the stars
+            I hope this night will last forever
+            Ebm
+            Oh oh oh oh
+            """.trimIndent(),
+            buildPreviewLines(
+                chart = chart,
+                options = PreviewRenderOptions(
+                    showLyrics = true,
+                    hideRepeatedSectionChords = true,
+                ),
+            ).joinToString("\n") { it.text },
+        )
+    }
+
+    @Test
     fun buildPreviewLines_compressModeStillCompressesSectionsThatContainMelodyBlocks() {
         val chart = """
             [Verse]
