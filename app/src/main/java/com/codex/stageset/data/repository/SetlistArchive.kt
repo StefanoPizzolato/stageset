@@ -37,6 +37,7 @@ internal data class SetlistArchiveSong(
     val preset: String,
     val keySignature: String,
     val chart: String,
+    val compressedChart: String? = null,
 )
 
 internal data class SetlistArchiveEntry(
@@ -45,7 +46,7 @@ internal data class SetlistArchiveEntry(
 )
 
 internal object SetlistArchiveCodec {
-    private const val CurrentVersion = 1
+    private const val CurrentVersion = 2
     private const val FormatName = "stage-set-archive"
 
     fun encode(payload: SetlistArchivePayload): String {
@@ -71,7 +72,12 @@ internal object SetlistArchiveCodec {
                                 .put("artist", song.artist)
                                 .put("preset", song.preset)
                                 .put("keySignature", song.keySignature)
-                                .put("chart", song.chart),
+                                .put("chart", song.chart)
+                                .apply {
+                                    song.compressedChart?.takeIf { it.isNotBlank() }?.let {
+                                        put("compressedChart", it)
+                                    }
+                                },
                         )
                     }
                 },
@@ -117,16 +123,19 @@ internal object SetlistArchiveCodec {
                     ?: throw IllegalArgumentException("Archive song ${index + 1} is invalid.")
                 val ref = songJson.optString("ref").ifBlank { "song-${index + 1}" }
                 add(
-                    SetlistArchiveSong(
-                        ref = ref,
-                        name = songJson.optString("name").trim(),
-                        artist = songJson.optString("artist").trim(),
-                        preset = songJson.optString("preset").trim(),
-                        keySignature = songJson.optString("keySignature").trim(),
-                        chart = songJson.optString("chart").trimEnd(),
-                    ),
-                )
-            }
+                        SetlistArchiveSong(
+                            ref = ref,
+                            name = songJson.optString("name").trim(),
+                            artist = songJson.optString("artist").trim(),
+                            preset = songJson.optString("preset").trim(),
+                            keySignature = songJson.optString("keySignature").trim(),
+                            chart = songJson.optString("chart").trimEnd(),
+                            compressedChart = songJson.optString("compressedChart")
+                                .trimEnd()
+                                .ifBlank { null },
+                        ),
+                    )
+                }
         }.also { songs ->
             require(songs.isNotEmpty()) {
                 "Archive does not contain any songs."

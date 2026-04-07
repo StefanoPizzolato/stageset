@@ -94,7 +94,7 @@ fun PreviewSettingsDialog(
                 )
                 PreviewSettingsRow(
                     title = "Show lyrics",
-                    description = "Turn this off to keep only section labels and chord lines in the live view.",
+                    description = "Turn this off to keep only section labels and chord lines in the live view. Turning this on also turns Compress off.",
                     checked = settings.showLyrics,
                     onCheckedChange = onShowLyricsChange,
                 )
@@ -124,7 +124,7 @@ fun PreviewSettingsDialog(
                 )
                 PreviewSettingsRow(
                     title = "Compress",
-                    description = "In chord-only preview, condense repeating chord runs into compact symbolic lines.",
+                    description = "In chord-only preview, condense repeating chord runs into compact symbolic lines. Turning this on also turns Show lyrics off.",
                     checked = settings.compressChords,
                     onCheckedChange = onCompressChordsChange,
                 )

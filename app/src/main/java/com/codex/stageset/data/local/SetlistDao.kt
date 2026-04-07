@@ -52,7 +52,8 @@ interface SetlistDao {
             songs.artist AS artist,
             songs.preset AS preset,
             songs.keySignature AS keySignature,
-            songs.chart AS chart
+            songs.chart AS chart,
+            songs.compressedChart AS compressedChart
         FROM setlist_songs
         INNER JOIN songs ON songs.id = setlist_songs.songId
         WHERE setlist_songs.setlistId = :setlistId
@@ -71,7 +72,8 @@ interface SetlistDao {
             songs.artist AS artist,
             songs.preset AS preset,
             songs.keySignature AS keySignature,
-            songs.chart AS chart
+            songs.chart AS chart,
+            songs.compressedChart AS compressedChart
         FROM setlist_songs
         INNER JOIN songs ON songs.id = setlist_songs.songId
         WHERE setlist_songs.setlistId = :setlistId

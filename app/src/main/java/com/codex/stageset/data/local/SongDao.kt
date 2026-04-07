@@ -42,6 +42,7 @@ interface SongDao {
           AND preset = :preset
           AND keySignature = :keySignature
           AND chart = :chart
+          AND IFNULL(compressedChart, '') = IFNULL(:compressedChart, '')
         LIMIT 1
         """,
     )
@@ -51,6 +52,7 @@ interface SongDao {
         preset: String,
         keySignature: String,
         chart: String,
+        compressedChart: String?,
     ): Long?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

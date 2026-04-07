@@ -67,12 +67,22 @@ fun ChartPreview(
     artist: String,
     keySignature: String,
     chart: String,
+    compressedChart: String? = null,
     showHeader: Boolean = true,
     textSizeSp: Int = 16,
     previewOptions: PreviewRenderOptions = PreviewRenderOptions(),
     modifier: Modifier = Modifier,
 ) {
-    val previewLines = remember(chart, previewOptions) { buildPreviewLines(chart, previewOptions) }
+    val previewChartSource = remember(chart, compressedChart, previewOptions) {
+        resolvePreviewChartSource(
+            chart = chart,
+            compressedChart = compressedChart,
+            options = previewOptions,
+        )
+    }
+    val previewLines = remember(previewChartSource) {
+        buildPreviewLines(previewChartSource.chart, previewChartSource.options)
+    }
     val scrollState = rememberScrollState()
     val defaultSectionColor = MaterialTheme.colorScheme.secondary
     val sectionHeadingColors = remember(
@@ -142,7 +152,7 @@ fun ChartPreview(
                             )
                         }
                     }
-                    if (chart.isBlank()) {
+                    if (previewChartSource.chart.isBlank()) {
                         Text(
                             text = "Your lyrics and chord chart will preview here.",
                             style = chartTextStyle,

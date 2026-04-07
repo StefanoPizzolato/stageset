@@ -16,6 +16,7 @@ data class SongEntity(
     val preset: String,
     val keySignature: String,
     val chart: String,
+    val compressedChart: String?,
     val lastModified: Long,
 )
 
@@ -91,4 +92,5 @@ data class SetlistPreviewSongRow(
     val preset: String,
     val keySignature: String,
     val chart: String,
+    val compressedChart: String?,
 )

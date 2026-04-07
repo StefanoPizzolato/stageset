@@ -39,6 +39,7 @@ import androidx.navigation.navArgument
 import com.codex.stageset.data.repository.PreviewSettingsRepository
 import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.data.repository.SongRepository
+import com.codex.stageset.data.repository.UltimateGuitarConsentRepository
 import com.codex.stageset.ui.setlists.SetlistEditorRoute
 import com.codex.stageset.ui.setlists.SetlistPreviewRoute
 import com.codex.stageset.ui.setlists.SetlistsRoute
@@ -82,6 +83,7 @@ private const val RestorePlaySongIndexKey = "restore_play_song_index"
 @Composable
 fun StageSetApp(
     previewSettingsRepository: PreviewSettingsRepository,
+    ultimateGuitarConsentRepository: UltimateGuitarConsentRepository,
     songRepository: SongRepository,
     setlistRepository: SetlistRepository,
 ) {
@@ -154,6 +156,7 @@ fun StageSetApp(
                     val sourceSongIndex = backStack.arguments?.getInt("sourceSongIndex") ?: -1
                     SongEditorRoute(
                         songId = backStack.arguments?.getLong("songId") ?: -1L,
+                        ultimateGuitarConsentRepository = ultimateGuitarConsentRepository,
                         songRepository = songRepository,
                         onBack = {
                             if (sourceSongIndex >= 0) {

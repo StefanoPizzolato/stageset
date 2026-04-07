@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -18,12 +19,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -32,6 +34,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -46,14 +49,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.codex.stageset.chart.MelodyParseResult
 import com.codex.stageset.chart.TransposeDirection
+import com.codex.stageset.chart.parseMelodyNotation
 import com.codex.stageset.chart.transposeChart
 import com.codex.stageset.chart.transposeKeySignature
 import com.codex.stageset.data.remote.UltimateGuitarBlockedException
@@ -61,8 +63,12 @@ import com.codex.stageset.data.repository.Song
 import com.codex.stageset.data.repository.ImportedSongDraft
 import com.codex.stageset.data.repository.SongDraft
 import com.codex.stageset.data.repository.SongRepository
+import com.codex.stageset.data.repository.UltimateGuitarConsentRepository
 import com.codex.stageset.ui.common.ChartPreview
 import com.codex.stageset.ui.common.ConfirmActionDialog
+import com.codex.stageset.ui.common.MelodyStaffPreview
+import com.codex.stageset.ui.common.PreviewRenderOptions
+import com.codex.stageset.ui.common.buildCompressedChartText
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -70,6 +76,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SongEditorRoute(
     songId: Long,
+    ultimateGuitarConsentRepository: UltimateGuitarConsentRepository,
     songRepository: SongRepository,
     onBack: () -> Unit,
 ) {
@@ -88,13 +95,38 @@ fun SongEditorRoute(
     var preset by rememberSaveable(songId) { mutableStateOf("") }
     var keySignature by rememberSaveable(songId) { mutableStateOf("") }
     var chart by rememberSaveable(songId) { mutableStateOf("") }
-    var importUrl by rememberSaveable(songId) { mutableStateOf("") }
+    var compressedChartOverride by rememberSaveable(songId) { mutableStateOf<String?>(null) }
+    var importQuery by rememberSaveable(songId) { mutableStateOf("") }
     var hasHydrated by rememberSaveable(songId) { mutableStateOf(songId <= 0) }
     var isSaving by remember { mutableStateOf(false) }
     var isImporting by remember { mutableStateOf(false) }
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
     var browserImportUrl by remember { mutableStateOf<String?>(null) }
+    var showUltimateGuitarSearch by remember { mutableStateOf(false) }
+    var hasAcceptedUltimateGuitarSearchDisclaimer by remember {
+        mutableStateOf(ultimateGuitarConsentRepository.hasAcceptedSearchDisclaimer())
+    }
+    var showUltimateGuitarSearchDisclaimer by remember { mutableStateOf(false) }
+    var showCompressedVersion by rememberSaveable(songId) { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    val autoCompressedChart = remember(chart) { buildCompressedChartText(chart) }
+    val displayedChart = if (showCompressedVersion) {
+        compressedChartOverride ?: autoCompressedChart
+    } else {
+        chart
+    }
+    val previewChart = displayedChart
+    val previewOptions = if (showCompressedVersion) {
+        PreviewRenderOptions(
+            showLyrics = false,
+            showChords = true,
+            showNotation = true,
+            hideRepeatedSectionChords = false,
+            compressChords = false,
+        )
+    } else {
+        PreviewRenderOptions()
+    }
 
     fun applyImportedSong(imported: ImportedSongDraft, message: String) {
         name = imported.name.ifBlank { name }
@@ -102,12 +134,14 @@ fun SongEditorRoute(
         preset = imported.preset.ifBlank { preset }
         keySignature = imported.keySignature.ifBlank { keySignature }
         chart = imported.chart
+        compressedChartOverride = null
         feedbackMessage = message
     }
 
     fun transposeSong(direction: TransposeDirection) {
         keySignature = transposeKeySignature(keySignature, direction)
         chart = transposeChart(chart, direction)
+        compressedChartOverride = compressedChartOverride?.let { transposeChart(it, direction) }
         feedbackMessage = if (direction == TransposeDirection.Up) {
             "Transposed up a semitone."
         } else {
@@ -115,9 +149,8 @@ fun SongEditorRoute(
         }
     }
 
-    fun launchDirectImport() {
+    fun launchDirectImport(targetUrl: String) {
         scope.launch {
-            val targetUrl = importUrl.trim()
             isImporting = true
             feedbackMessage = null
             songRepository.importFromUltimateGuitar(targetUrl)
@@ -136,6 +169,40 @@ fun SongEditorRoute(
         }
     }
 
+    fun launchSearchResultImport(result: com.codex.stageset.data.remote.UltimateGuitarSearchResult) {
+        scope.launch {
+            isImporting = true
+            feedbackMessage = null
+            songRepository.importFromUltimateGuitarTab(
+                tabId = result.tabId,
+                tabAccessType = result.tabAccessType,
+            )
+                .onSuccess { imported ->
+                    applyImportedSong(imported, "Imported chart from Ultimate Guitar.")
+                }
+                .onFailure { throwable ->
+                    feedbackMessage = throwable.message ?: "Import failed."
+                }
+            isImporting = false
+        }
+    }
+
+    fun openUltimateGuitarSearch() {
+        if (hasAcceptedUltimateGuitarSearchDisclaimer) {
+            showUltimateGuitarSearch = true
+        } else {
+            showUltimateGuitarSearchDisclaimer = true
+        }
+    }
+
+    fun updateDisplayedChart(updated: String) {
+        if (showCompressedVersion) {
+            compressedChartOverride = updated.takeUnless { it == autoCompressedChart }
+        } else {
+            chart = updated
+        }
+    }
+
     LaunchedEffect(existingSong?.id) {
         if (!hasHydrated && existingSong != null) {
             name = existingSong?.name.orEmpty()
@@ -143,6 +210,7 @@ fun SongEditorRoute(
             preset = existingSong?.preset.orEmpty()
             keySignature = existingSong?.keySignature.orEmpty()
             chart = existingSong?.chart.orEmpty()
+            compressedChartOverride = existingSong?.compressedChart
             hasHydrated = true
         }
     }
@@ -199,6 +267,7 @@ fun SongEditorRoute(
                                                 preset = preset,
                                                 keySignature = keySignature,
                                                 chart = chart,
+                                                compressedChart = compressedChartOverride,
                                             ),
                                         )
                                         isSaving = false
@@ -223,6 +292,7 @@ fun SongEditorRoute(
                                                 preset = preset,
                                                 keySignature = keySignature,
                                                 chart = chart,
+                                                compressedChart = compressedChartOverride,
                                             ),
                                         )
                                         isSaving = false
@@ -260,19 +330,21 @@ fun SongEditorRoute(
                             artist = artist,
                             preset = preset,
                             keySignature = keySignature,
-                            chart = chart,
-                            importUrl = importUrl,
+                            chart = displayedChart,
+                            importQuery = importQuery,
+                            showCompressedVersion = showCompressedVersion,
                             isImporting = isImporting,
                             feedbackMessage = feedbackMessage,
                             onNameChange = { name = it },
                             onArtistChange = { artist = it },
                             onPresetChange = { preset = it },
                             onKeyChange = { keySignature = it },
-                            onChartChange = { chart = it },
+                            onChartChange = ::updateDisplayedChart,
                             onTransposeUp = { transposeSong(TransposeDirection.Up) },
                             onTransposeDown = { transposeSong(TransposeDirection.Down) },
-                            onImportUrlChange = { importUrl = it },
-                            onImportClick = ::launchDirectImport,
+                            onImportQueryChange = { importQuery = it },
+                            onImportClick = ::openUltimateGuitarSearch,
+                            onShowCompressedVersionChange = { showCompressedVersion = it },
                         )
                     }
 
@@ -280,7 +352,8 @@ fun SongEditorRoute(
                         title = name,
                         artist = artist,
                         keySignature = keySignature,
-                        chart = chart,
+                        chart = previewChart,
+                        previewOptions = previewOptions,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
@@ -300,25 +373,28 @@ fun SongEditorRoute(
                         artist = artist,
                         preset = preset,
                         keySignature = keySignature,
-                        chart = chart,
-                        importUrl = importUrl,
+                        chart = displayedChart,
+                        importQuery = importQuery,
+                        showCompressedVersion = showCompressedVersion,
                         isImporting = isImporting,
                         feedbackMessage = feedbackMessage,
                         onNameChange = { name = it },
                         onArtistChange = { artist = it },
                         onPresetChange = { preset = it },
                         onKeyChange = { keySignature = it },
-                        onChartChange = { chart = it },
+                        onChartChange = ::updateDisplayedChart,
                         onTransposeUp = { transposeSong(TransposeDirection.Up) },
                         onTransposeDown = { transposeSong(TransposeDirection.Down) },
-                        onImportUrlChange = { importUrl = it },
-                        onImportClick = ::launchDirectImport,
+                        onImportQueryChange = { importQuery = it },
+                        onImportClick = ::openUltimateGuitarSearch,
+                        onShowCompressedVersionChange = { showCompressedVersion = it },
                     )
                     ChartPreview(
                         title = name,
                         artist = artist,
                         keySignature = keySignature,
-                        chart = chart,
+                        chart = previewChart,
+                        previewOptions = previewOptions,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(520.dp),
@@ -342,6 +418,39 @@ fun SongEditorRoute(
         )
     }
 
+    if (showUltimateGuitarSearch) {
+        UltimateGuitarSearchDialog(
+            initialQuery = importQuery.ifBlank {
+                listOfNotNull(
+                    name.takeIf { it.isNotBlank() },
+                    artist.takeIf { it.isNotBlank() },
+                ).joinToString(" ")
+            },
+            onDismiss = { showUltimateGuitarSearch = false },
+            onSearch = songRepository::searchUltimateGuitar,
+            onResultSelected = { result ->
+                showUltimateGuitarSearch = false
+                importQuery = listOfNotNull(
+                    result.title.takeIf { it.isNotBlank() },
+                    result.artist.takeIf { it.isNotBlank() },
+                ).joinToString(" ")
+                launchSearchResultImport(result)
+            },
+        )
+    }
+
+    if (showUltimateGuitarSearchDisclaimer) {
+        UltimateGuitarSearchDisclaimerDialog(
+            onDismiss = { showUltimateGuitarSearchDisclaimer = false },
+            onContinue = {
+                ultimateGuitarConsentRepository.acceptSearchDisclaimer()
+                hasAcceptedUltimateGuitarSearchDisclaimer = true
+                showUltimateGuitarSearchDisclaimer = false
+                showUltimateGuitarSearch = true
+            },
+        )
+    }
+
     if (showDeleteConfirmation) {
         ConfirmActionDialog(
             title = "Delete song?",
@@ -357,6 +466,63 @@ fun SongEditorRoute(
             onDismiss = { showDeleteConfirmation = false },
         )
     }
+}
+
+@Composable
+private fun UltimateGuitarSearchDisclaimerDialog(
+    onDismiss: () -> Unit,
+    onContinue: () -> Unit,
+) {
+    var hasAcceptedTerms by rememberSaveable { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = onContinue,
+                enabled = hasAcceptedTerms,
+            ) {
+                Text("Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        title = {
+            Text("Ultimate Guitar disclaimer")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "This search works like searching directly on the Ultimate Guitar website. We are not affiliated with, endorsed by, or sponsored by Ultimate Guitar.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = "By continuing, you confirm that you are responsible for how you use any results or imported charts, and you agree to indemnify this app and its developers for any improper or unlawful use.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Checkbox(
+                        checked = hasAcceptedTerms,
+                        onCheckedChange = { hasAcceptedTerms = it },
+                    )
+                    Text(
+                        text = "I understand and accept this disclaimer.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            }
+        },
+    )
 }
 
 private fun shouldOfferBrowserFallback(
@@ -398,7 +564,8 @@ private fun SongForm(
     preset: String,
     keySignature: String,
     chart: String,
-    importUrl: String,
+    importQuery: String,
+    showCompressedVersion: Boolean,
     isImporting: Boolean,
     feedbackMessage: String?,
     onNameChange: (String) -> Unit,
@@ -408,10 +575,12 @@ private fun SongForm(
     onChartChange: (String) -> Unit,
     onTransposeUp: () -> Unit,
     onTransposeDown: () -> Unit,
-    onImportUrlChange: (String) -> Unit,
+    onImportQueryChange: (String) -> Unit,
     onImportClick: () -> Unit,
+    onShowCompressedVersionChange: (Boolean) -> Unit,
 ) {
     var showNotationHelp by remember { mutableStateOf(false) }
+    var showCompressedVersionHelp by remember { mutableStateOf(false) }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -469,16 +638,12 @@ private fun SongForm(
             }
         }
 
-        Text(
-            text = "Ultimate Guitar import",
-            style = MaterialTheme.typography.titleLarge,
-        )
         OutlinedTextField(
-            value = importUrl,
-            onValueChange = onImportUrlChange,
+            value = importQuery,
+            onValueChange = onImportQueryChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Ultimate Guitar URL") },
-            placeholder = { Text("https://tabs.ultimate-guitar.com/...") },
+            label = { Text("Search Ultimate Guitar") },
+            placeholder = { Text("Song title artist") },
             singleLine = true,
         )
         Row(
@@ -486,11 +651,33 @@ private fun SongForm(
         ) {
             Button(
                 onClick = onImportClick,
-                enabled = importUrl.isNotBlank() && !isImporting,
+                enabled = importQuery.isNotBlank() && !isImporting,
             ) {
-                Icon(Icons.Outlined.CloudDownload, contentDescription = null)
+                Icon(Icons.Outlined.Search, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Import Tab")
+                Text("Search Tabs")
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Switch(
+                checked = showCompressedVersion,
+                onCheckedChange = onShowCompressedVersionChange,
+            )
+            Text(
+                text = "Show compressed version",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = { showCompressedVersionHelp = true }) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = "Compressed version help",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         if (isImporting) {
@@ -504,17 +691,21 @@ private fun SongForm(
             )
         }
 
-        Text(
-            text = "Lyrics and chord chart",
-            style = MaterialTheme.typography.titleLarge,
-        )
         OutlinedTextField(
             value = chart,
             onValueChange = onChartChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(420.dp),
-            label = { Text("Chart") },
+            label = {
+                Text(
+                    if (showCompressedVersion) {
+                        "Compressed chart"
+                    } else {
+                        "Chart"
+                    },
+                )
+            },
             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
             supportingText = {
                 Row(
@@ -542,7 +733,50 @@ private fun SongForm(
                 onDismiss = { showNotationHelp = false },
             )
         }
+
+        if (showCompressedVersionHelp) {
+            CompressedVersionHelpDialog(
+                onDismiss = { showCompressedVersionHelp = false },
+            )
+        }
     }
+}
+
+@Composable
+private fun CompressedVersionHelpDialog(
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        },
+        title = {
+            Text("Compressed version")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "This shows the same chord-only compressed layout used in live view when Compress is on.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = "If you edit this version and save, StageSet stores it separately from the full chart.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "That saved compressed version will be used in play mode whenever Compress is enabled, instead of rebuilding one automatically from the main chart.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+    )
 }
 
 @Composable
@@ -561,44 +795,47 @@ private fun NotationHelpDialog(
         },
         text = {
             Column(
+                modifier = Modifier
+                    .heightIn(max = 560.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 GlossaryLine(
-                    label = "Blocks",
-                    value = "Wrap a melody in @ ... @ so it renders as staff notation in the chart.",
+                    text = "Write notation inside @ ... @ blocks. Each example below shows the rendered notation first, then the MML that creates it.",
                 )
-                GlossaryLine(
-                    label = "Example",
-                    value = "@ key=Ebm meter=4/4 cleff=treble o4 l8 c d eb f g4 r8 bb8&bb8 @",
-                    monospace = true,
+                NotationGlossarySection(
+                    title = "Notes",
+                    details = listOf(
+                        "A-G notes",
+                        "# sharp, b flat, n natural",
+                        "r rest",
+                    ),
+                    snippet = "o4 l4 c d e r f# g a bb",
                 )
-                GlossaryLine(
-                    label = "Notes",
-                    value = "c d e f g a b",
+                NotationGlossarySection(
+                    title = "Rhythm",
+                    details = listOf(
+                        "2 half notes, 4 quarter notes, 8 eighth notes, and so on",
+                        "& ties two notes of the same pitch",
+                        "Note duration follows the last set duration",
+                    ),
+                    snippet = "o4 c4 e8 f g16 a bb a&a4",
                 )
-                GlossaryLine(
-                    label = "Accidentals",
-                    value = "# sharp, b flat, n natural",
+                NotationGlossarySection(
+                    title = "Octaves",
+                    details = listOf(
+                        "o4 middle octave, o5 fifth octave, and so on",
+                        "> and < go up and down an octave",
+                    ),
+                    snippet = "o4 a16 b o5 c d e d c < b a2",
                 )
-                GlossaryLine(
-                    label = "Octave",
-                    value = "o4 sets the octave. > moves up one octave. < moves down one octave.",
-                )
-                GlossaryLine(
-                    label = "Rhythm",
-                    value = "l4 sets the default length. c8 or r16 also becomes the new default for what follows. Dots are never sticky, so write c4. or r8. each time.",
-                )
-                GlossaryLine(
-                    label = "Rests",
-                    value = "r4 quarter rest, r8 eighth rest, r16 sixteenth rest",
-                )
-                GlossaryLine(
-                    label = "Ties",
-                    value = "c8&c8 ties two notes of the same pitch together.",
-                )
-                GlossaryLine(
-                    label = "Score settings",
-                    value = "key=Ebm, meter=3/4, cleff=treble, cleff=bass, cleff=alto, cleff=tenor, t120",
+                NotationGlossarySection(
+                    title = "Score settings",
+                    details = listOf(
+                        "key=Ebm meter=4/4 cleff=treble",
+                        "If not set it is not visible",
+                    ),
+                    snippet = "key=Ebm meter=4/4 cleff=treble o4 l4 c d eb f",
                 )
             }
         },
@@ -607,22 +844,57 @@ private fun NotationHelpDialog(
 
 @Composable
 private fun GlossaryLine(
-    label: String,
-    value: String,
-    monospace: Boolean = false,
+    text: String,
 ) {
     Text(
-        text = buildAnnotatedString {
-            pushStyle(SpanStyle(fontWeight = FontWeight.SemiBold))
-            append("$label: ")
-            pop()
-            append(value)
-        },
-        style = if (monospace) {
-            MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
-        } else {
-            MaterialTheme.typography.bodyMedium
-        },
-        color = MaterialTheme.colorScheme.onSurface,
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+@Composable
+private fun NotationGlossarySection(
+    title: String,
+    details: List<String>,
+    snippet: String,
+) {
+    val parsedNotation = remember(snippet) { parseMelodyNotation(snippet) }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        details.forEach { detail ->
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        when (parsedNotation) {
+            is MelodyParseResult.Success -> {
+                MelodyStaffPreview(
+                    notation = parsedNotation.notation,
+                    scale = 0.82f,
+                )
+            }
+
+            is MelodyParseResult.Error -> {
+                Text(
+                    text = parsedNotation.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        Text(
+            text = snippet,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }

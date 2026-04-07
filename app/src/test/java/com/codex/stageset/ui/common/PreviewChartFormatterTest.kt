@@ -313,6 +313,35 @@ class PreviewChartFormatterTest {
     }
 
     @Test
+    fun buildCompressedChartText_matchesCompressedChordOnlyViewAndKeepsNotationEditable() {
+        val chart = """
+            [Verse 1]
+            F      Am
+            F      Am
+            @
+            o4 l4 c d
+            @
+
+            [Verse 2]
+            F Am
+            F Am
+        """.trimIndent()
+
+        assertEquals(
+            """
+            [Verse 1]
+            :F  Am: x2
+            @
+            o4 l4 c d
+            @
+
+            [Verse 2]
+            """.trimIndent(),
+            buildCompressedChartText(chart),
+        )
+    }
+
+    @Test
     fun buildPreviewLines_canCompressRepeatedChordRuns() {
         val chart = """
             [Verse]
@@ -333,6 +362,46 @@ class PreviewChartFormatterTest {
         assertEquals("[Verse]", rendered[0].text)
         assertEquals(":F  Am: x2   G  C  F  Am", rendered[1].text)
         assertTrue(rendered[1].accentSpans.isNotEmpty())
+    }
+
+    @Test
+    fun resolvePreviewChartSource_prefersSavedCompressedChartOnlyInChordOnlyCompressMode() {
+        val resolved = resolvePreviewChartSource(
+            chart = "[Verse]\nF      Am",
+            compressedChart = "[Verse]\n:F  Am: x2",
+            options = PreviewRenderOptions(
+                showLyrics = false,
+                compressChords = true,
+            ),
+        )
+
+        assertEquals("[Verse]\n:F  Am: x2", resolved.chart)
+        assertFalse(resolved.options.compressChords)
+        assertFalse(resolved.options.hideRepeatedSectionChords)
+    }
+
+    @Test
+    fun resolvePreviewChartSource_fallsBackToMainChartWhenNoSavedCompressedVersionExists() {
+        val options = PreviewRenderOptions(
+            showLyrics = false,
+            compressChords = true,
+        )
+
+        val resolved = resolvePreviewChartSource(
+            chart = "[Verse]\nF      Am\nF      Am",
+            compressedChart = null,
+            options = options,
+        )
+
+        assertEquals("[Verse]\nF      Am\nF      Am", resolved.chart)
+        assertEquals(options, resolved.options)
+        assertEquals(
+            """
+            [Verse]
+            :F  Am: x2
+            """.trimIndent(),
+            buildPreviewLines(resolved.chart, resolved.options).joinToString("\n") { it.text },
+        )
     }
 
     @Test

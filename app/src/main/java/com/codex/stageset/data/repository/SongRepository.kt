@@ -3,6 +3,7 @@ package com.codex.stageset.data.repository
 import com.codex.stageset.data.local.SongDao
 import com.codex.stageset.data.local.SongEntity
 import com.codex.stageset.data.remote.UltimateGuitarImporter
+import com.codex.stageset.data.remote.UltimateGuitarSearchResult
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +42,9 @@ class SongRepository(
             preset = draft.preset.trim(),
             keySignature = draft.keySignature.trim(),
             chart = draft.chart.trimEnd(),
+            compressedChart = draft.compressedChart
+                ?.trimEnd()
+                ?.takeIf { it.isNotBlank() },
             lastModified = System.currentTimeMillis(),
         )
         if (songId == null) {
@@ -61,6 +65,21 @@ class SongRepository(
         }
     }
 
+    suspend fun searchUltimateGuitar(query: String): Result<List<UltimateGuitarSearchResult>> = withContext(ioDispatcher) {
+        runCatching {
+            importer.search(query)
+        }
+    }
+
+    suspend fun importFromUltimateGuitarTab(
+        tabId: Long,
+        tabAccessType: String,
+    ): Result<ImportedSongDraft> = withContext(ioDispatcher) {
+        runCatching {
+            importer.importTab(tabId = tabId, tabAccessType = tabAccessType)
+        }
+    }
+
     private fun SongEntity.toModel() = Song(
         id = id,
         name = name,
@@ -68,6 +87,7 @@ class SongRepository(
         preset = preset,
         keySignature = keySignature,
         chart = chart,
+        compressedChart = compressedChart,
         lastModified = lastModified,
     )
 }

@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SetlistEntity::class,
         SetlistSongEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class StageSetDatabase : RoomDatabase() {
@@ -25,6 +25,17 @@ abstract class StageSetDatabase : RoomDatabase() {
                     """
                     ALTER TABLE songs
                     ADD COLUMN preset TEXT NOT NULL DEFAULT ''
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        val Migration2To3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    ALTER TABLE songs
+                    ADD COLUMN compressedChart TEXT
                     """.trimIndent(),
                 )
             }

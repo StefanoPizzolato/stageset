@@ -23,7 +23,12 @@ class PreviewSettingsRepository(context: Context) {
     val settings: StateFlow<PreviewSettings> = _settings.asStateFlow()
 
     fun setShowLyrics(showLyrics: Boolean) {
-        updateSettings { it.copy(showLyrics = showLyrics) }
+        updateSettings {
+            it.copy(
+                showLyrics = showLyrics,
+                compressChords = if (showLyrics) false else it.compressChords,
+            )
+        }
     }
 
     fun setShowLyricsCue(showLyricsCue: Boolean) {
@@ -43,7 +48,12 @@ class PreviewSettingsRepository(context: Context) {
     }
 
     fun setCompressChords(compressChords: Boolean) {
-        updateSettings { it.copy(compressChords = compressChords) }
+        updateSettings {
+            it.copy(
+                compressChords = compressChords,
+                showLyrics = if (compressChords) false else it.showLyrics,
+            )
+        }
     }
 
     fun setColorizeSectionHeadings(colorizeSectionHeadings: Boolean) {

@@ -75,6 +75,7 @@ class SetlistRepository(
                         preset = row.preset,
                         keySignature = row.keySignature,
                         chart = row.chart,
+                        compressedChart = row.compressedChart,
                     )
                 },
             )
@@ -144,11 +145,12 @@ class SetlistRepository(
                     preset = song.preset,
                     keySignature = song.keySignature,
                     chart = song.chart,
+                    compressedChart = song.compressedChart,
                 )
             }
 
             val payload = SetlistArchivePayload(
-                version = 1,
+                version = 2,
                 exportedAt = System.currentTimeMillis(),
                 setlist = SetlistArchiveSetlist(
                     name = setlist.name,
@@ -186,6 +188,7 @@ class SetlistRepository(
                         preset = archiveSong.preset,
                         keySignature = archiveSong.keySignature,
                         chart = archiveSong.chart,
+                        compressedChart = archiveSong.compressedChart,
                     )
                     val songId = if (matchingSongId != null) {
                         reusedSongs++
@@ -199,6 +202,7 @@ class SetlistRepository(
                                 preset = archiveSong.preset,
                                 keySignature = archiveSong.keySignature,
                                 chart = archiveSong.chart,
+                                compressedChart = archiveSong.compressedChart,
                                 lastModified = System.currentTimeMillis(),
                             ),
                         )

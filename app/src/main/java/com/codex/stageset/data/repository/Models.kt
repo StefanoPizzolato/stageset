@@ -7,6 +7,7 @@ data class Song(
     val preset: String,
     val keySignature: String,
     val chart: String,
+    val compressedChart: String?,
     val lastModified: Long,
 )
 
@@ -25,6 +26,7 @@ data class SongDraft(
     val preset: String,
     val keySignature: String,
     val chart: String,
+    val compressedChart: String? = null,
 )
 
 data class ImportedSongDraft(
@@ -53,6 +55,7 @@ data class SetlistPreviewSong(
     val preset: String,
     val keySignature: String,
     val chart: String,
+    val compressedChart: String?,
 )
 
 data class SetlistSummary(

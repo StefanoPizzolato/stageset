@@ -8,7 +8,7 @@ class SetlistArchiveCodecTest {
     @Test
     fun encodeAndDecode_roundTripsSetlistSongsAndOrder() {
         val payload = SetlistArchivePayload(
-            version = 1,
+            version = 2,
             exportedAt = 1234L,
             setlist = SetlistArchiveSetlist(
                 name = "Wedding Set",
@@ -23,6 +23,7 @@ class SetlistArchiveCodecTest {
                     preset = "A1",
                     keySignature = "F",
                     chart = "F   Bb",
+                    compressedChart = ":F   Bb: x2",
                 ),
                 SetlistArchiveSong(
                     ref = "song-2",
@@ -68,6 +69,28 @@ class SetlistArchiveCodecTest {
 
         assertEquals(listOf("first", "second"), decoded.entries.map { it.songRef })
         assertEquals(listOf(0, 1), decoded.entries.map { it.position })
+    }
+
+    @Test
+    fun decode_withoutCompressedChartPreservesBackwardCompatibility() {
+        val archiveJson = """
+            {
+              "format": "stage-set-archive",
+              "version": 1,
+              "setlist": {
+                "name": "Imported",
+                "notes": "",
+                "createdAt": 1
+              },
+              "songs": [
+                { "ref": "first", "name": "Song A", "artist": "", "preset": "", "keySignature": "C", "chart": "C" }
+              ]
+            }
+        """.trimIndent()
+
+        val decoded = SetlistArchiveCodec.decode(archiveJson)
+
+        assertEquals(null, decoded.songs.single().compressedChart)
     }
 
     @Test

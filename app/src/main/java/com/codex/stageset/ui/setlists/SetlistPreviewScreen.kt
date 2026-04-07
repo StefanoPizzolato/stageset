@@ -310,6 +310,7 @@ fun SetlistPreviewRoute(
                                 artist = currentSong?.artist.orEmpty(),
                                 keySignature = currentSong?.keySignature.orEmpty(),
                                 chart = currentSong?.chart.orEmpty(),
+                                compressedChart = currentSong?.compressedChart,
                                 showHeader = false,
                                 textSizeSp = textSizeSp,
                                 previewOptions = PreviewRenderOptions(

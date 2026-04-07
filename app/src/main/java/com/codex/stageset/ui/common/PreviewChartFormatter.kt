@@ -35,6 +35,11 @@ data class PreviewLine(
     val melodyNotation: MelodyNotation? = null,
 )
 
+internal data class PreviewChartSource(
+    val chart: String,
+    val options: PreviewRenderOptions,
+)
+
 enum class PreviewLineType {
     Section,
     Chord,
@@ -106,6 +111,84 @@ fun buildPreviewLines(
     }
 
     return compactBlankLines(rendered)
+}
+
+internal fun resolvePreviewChartSource(
+    chart: String,
+    compressedChart: String?,
+    options: PreviewRenderOptions,
+): PreviewChartSource {
+    val shouldUseCompressedOverride = options.compressChords &&
+        options.showChords &&
+        !options.showLyrics &&
+        !compressedChart.isNullOrBlank()
+
+    return if (shouldUseCompressedOverride) {
+        PreviewChartSource(
+            chart = compressedChart,
+            options = options.copy(
+                compressChords = false,
+                hideRepeatedSectionChords = false,
+            ),
+        )
+    } else {
+        PreviewChartSource(
+            chart = chart,
+            options = options,
+        )
+    }
+}
+
+fun buildCompressedChartText(
+    chart: String,
+    denseChordSpacing: Boolean = false,
+): String {
+    if (chart.isBlank()) {
+        return ""
+    }
+
+    val sections = parseSections(chart)
+    val seenChordLineSequences = mutableMapOf<String, MutableList<List<String>>>()
+    val renderedSections = sections.mapNotNull { section ->
+        val hiddenLeadingChordLines = if (
+            section.repeatFamilyKey != null &&
+            section.chordLineSignatures.isNotEmpty()
+        ) {
+            seenChordLineSequences[section.repeatFamilyKey]
+                ?.maxOfOrNull { previous ->
+                    matchingLeadingChordLineCount(
+                        previous = previous,
+                        current = section.chordLineSignatures,
+                    )
+                }
+                ?: 0
+        } else {
+            0
+        }
+
+        if (section.repeatFamilyKey != null && section.chordLineSignatures.isNotEmpty()) {
+            seenChordLineSequences
+                .getOrPut(section.repeatFamilyKey) { mutableListOf() }
+                .add(section.chordLineSignatures)
+        }
+
+        renderCompressedChartTextSection(
+            section = section,
+            hiddenLeadingChordLines = hiddenLeadingChordLines,
+            denseChordSpacing = denseChordSpacing,
+        ).takeIf { it.isNotEmpty() }
+    }
+
+    return compactPlainBlankLines(
+        buildList {
+            renderedSections.forEachIndexed { index, sectionLines ->
+                if (index > 0 && lastOrNull()?.isNotEmpty() == true) {
+                    add("")
+                }
+                addAll(sectionLines)
+            }
+        },
+    ).joinToString("\n")
 }
 
 private data class ChartSection(
@@ -277,6 +360,7 @@ private fun renderSection(
                 is ChartSectionEntry.TextLine -> {
                     val line = entry.text
                     val placements = parsePreviewChordPlacements(line)
+                    val compressedChordText = parseCompressedPreviewChordLine(line)
                     when {
                         line.isBlank() -> add(PreviewLine(text = "", type = PreviewLineType.Empty))
                         placements != null -> {
@@ -302,6 +386,16 @@ private fun renderSection(
                                 )
                             }
                             chordLineIndex++
+                        }
+                        compressedChordText != null && showChords -> {
+                            add(
+                                PreviewLine(
+                                    text = compressedChordText.text,
+                                    type = PreviewLineType.Chord,
+                                    accentSpans = compressedChordText.accentSpans,
+                                    sectionColorGroup = section.sectionColorGroup,
+                                ),
+                            )
                         }
                         showLyrics -> {
                             add(PreviewLine(text = line, type = PreviewLineType.Lyric))
@@ -381,6 +475,60 @@ private fun renderCompressedChordSection(
     return compactBlankLines(rendered)
 }
 
+private fun renderCompressedChartTextSection(
+    section: ChartSection,
+    hiddenLeadingChordLines: Int,
+    denseChordSpacing: Boolean,
+): List<String> {
+    val rendered = buildList {
+        val pendingChordLines = mutableListOf<String>()
+        var chordLineIndex = 0
+
+        fun flushPendingChordLines() {
+            if (pendingChordLines.isEmpty()) {
+                return
+            }
+            addAll(
+                buildCompressedChordPreviewLines(
+                    lines = pendingChordLines.toList(),
+                    denseSpacing = denseChordSpacing,
+                    sectionColorGroup = null,
+                ).map(PreviewLine::text),
+            )
+            pendingChordLines.clear()
+        }
+
+        section.header?.let(::add)
+
+        section.entries.forEach { entry ->
+            when (entry) {
+                is ChartSectionEntry.MelodyBlock -> {
+                    flushPendingChordLines()
+                    add("@")
+                    if (entry.source.isNotBlank()) {
+                        addAll(entry.source.lines())
+                    }
+                    add("@")
+                }
+
+                is ChartSectionEntry.TextLine -> {
+                    val placements = parsePreviewChordPlacements(entry.text)
+                    if (placements != null) {
+                        if (chordLineIndex >= hiddenLeadingChordLines) {
+                            pendingChordLines += entry.text
+                        }
+                        chordLineIndex++
+                    }
+                }
+            }
+        }
+
+        flushPendingChordLines()
+    }
+
+    return compactPlainBlankLines(rendered)
+}
+
 private fun buildChordLineSignatures(entries: List<ChartSectionEntry>): List<String> {
     return entries.asSequence()
         .mapNotNull { entry -> (entry as? ChartSectionEntry.TextLine)?.text }
@@ -407,7 +555,9 @@ private fun buildLyricsCue(entries: List<ChartSectionEntry>): String? {
     val words = entries.asSequence()
         .mapNotNull { entry -> (entry as? ChartSectionEntry.TextLine)?.text }
         .filter { text ->
-            text.isNotBlank() && parsePreviewChordPlacements(text) == null
+            text.isNotBlank() &&
+                parsePreviewChordPlacements(text) == null &&
+                parseCompressedPreviewChordLine(text) == null
         }
         .flatMap { text ->
             text.trim()
@@ -456,6 +606,41 @@ private fun parsePreviewChordPlacements(line: String): List<ChordPlacement>? {
         return null
     }
     return parseChordPlacements(line)?.takeIf { it.isNotEmpty() }
+}
+
+private fun parseCompressedPreviewChordLine(line: String): StyledPreviewText? {
+    val trimmed = line.trim()
+    if (!trimmed.contains(": x")) {
+        return null
+    }
+
+    val repeatMatcher = Regex(""":[ \t]*x\d+""")
+    val matches = repeatMatcher.findAll(line).toList()
+    if (matches.isEmpty()) {
+        return null
+    }
+
+    val accentSpans = buildList {
+        line.forEachIndexed { index, character ->
+            if (character == ':') {
+                add(PreviewSpan(start = index, endExclusive = index + 1))
+            }
+        }
+        matches.forEach { match ->
+            val multiplierStart = match.range.first + match.value.indexOf('x')
+            add(
+                PreviewSpan(
+                    start = multiplierStart,
+                    endExclusive = match.range.last + 1,
+                ),
+            )
+        }
+    }.distinct()
+
+    return StyledPreviewText(
+        text = line,
+        accentSpans = accentSpans,
+    )
 }
 
 private fun buildChordSlotLayout(
@@ -860,6 +1045,29 @@ private fun compactBlankLines(lines: List<PreviewLine>): List<PreviewLine> {
     }
 
     while (compacted.lastOrNull()?.type == PreviewLineType.Empty) {
+        compacted.removeAt(compacted.lastIndex)
+    }
+
+    return compacted
+}
+
+private fun compactPlainBlankLines(lines: List<String>): List<String> {
+    val compacted = mutableListOf<String>()
+    var previousWasBlank = true
+
+    lines.forEach { line ->
+        if (line.isBlank()) {
+            if (!previousWasBlank) {
+                compacted += ""
+            }
+            previousWasBlank = true
+        } else {
+            compacted += line
+            previousWasBlank = false
+        }
+    }
+
+    while (compacted.lastOrNull()?.isBlank() == true) {
         compacted.removeAt(compacted.lastIndex)
     }
 

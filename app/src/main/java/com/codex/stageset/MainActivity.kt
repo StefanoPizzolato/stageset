@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
             StageSetTheme {
                 StageSetApp(
                     previewSettingsRepository = container.previewSettingsRepository,
+                    ultimateGuitarConsentRepository = container.ultimateGuitarConsentRepository,
                     songRepository = container.songRepository,
                     setlistRepository = container.setlistRepository,
                 )

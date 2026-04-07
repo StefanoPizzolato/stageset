@@ -7,6 +7,7 @@ import com.codex.stageset.data.remote.UltimateGuitarImporter
 import com.codex.stageset.data.repository.PreviewSettingsRepository
 import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.data.repository.SongRepository
+import com.codex.stageset.data.repository.UltimateGuitarConsentRepository
 
 class AppContainer(context: Context) {
     private val database = Room.databaseBuilder(
@@ -15,11 +16,13 @@ class AppContainer(context: Context) {
         "stage-set.db",
     ).addMigrations(
         StageSetDatabase.Migration1To2,
+        StageSetDatabase.Migration2To3,
     ).build()
 
     private val ultimateGuitarImporter = UltimateGuitarImporter()
 
     val previewSettingsRepository = PreviewSettingsRepository(context.applicationContext)
+    val ultimateGuitarConsentRepository = UltimateGuitarConsentRepository(context.applicationContext)
 
     val songRepository = SongRepository(
         songDao = database.songDao(),

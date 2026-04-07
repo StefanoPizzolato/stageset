@@ -158,6 +158,7 @@ fun SongPreviewRoute(
                         artist = song?.artist.orEmpty(),
                         keySignature = song?.keySignature.orEmpty(),
                         chart = song?.chart.orEmpty(),
+                        compressedChart = song?.compressedChart,
                         showHeader = false,
                         textSizeSp = textSizeSp,
                         previewOptions = PreviewRenderOptions(
