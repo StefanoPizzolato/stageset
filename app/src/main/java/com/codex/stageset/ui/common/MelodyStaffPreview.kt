@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.content.res.ResourcesCompat
 import com.codex.stageset.R
@@ -39,6 +40,7 @@ import com.codex.stageset.chart.MelodySymbol
 import com.codex.stageset.chart.MelodyWholeNoteTicks
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 @Composable
 fun MelodyStaffPreview(
@@ -47,12 +49,52 @@ fun MelodyStaffPreview(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
     val surfaceColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
     val notationColor = Color.White
     val staffGuideColor = Color(0xFFF1E8D8)
     val layoutScale = scale.coerceIn(0.7f, 1.7f)
     val musicTypeface = remember(context) {
         ResourcesCompat.getFont(context, R.font.petaluma)
+    }
+    val paints = remember(density, layoutScale, musicTypeface) {
+        StaffPaints(
+            accidentalPaint = createMusicPaint(
+                color = notationColor,
+                textSize = with(density) { 18.dp.toPx() } * layoutScale,
+                typeface = musicTypeface,
+            ),
+            clefPaint = createMusicPaint(
+                color = notationColor,
+                textSize = with(density) { 38.dp.toPx() } * layoutScale,
+                typeface = musicTypeface,
+            ),
+            meterPaint = createMusicPaint(
+                color = notationColor,
+                textSize = with(density) { 22.dp.toPx() } * layoutScale,
+                typeface = musicTypeface,
+            ),
+            restPaint = createMusicPaint(
+                color = notationColor,
+                textSize = with(density) { 30.dp.toPx() } * layoutScale,
+                typeface = musicTypeface,
+            ),
+            noteheadPaint = createMusicPaint(
+                color = notationColor,
+                textSize = with(density) { 30.dp.toPx() } * layoutScale,
+                typeface = musicTypeface,
+            ),
+            flagPaint = createMusicPaint(
+                color = notationColor,
+                textSize = with(density) { 30.dp.toPx() } * layoutScale,
+                typeface = musicTypeface,
+            ),
+            dotPaint = createMusicPaint(
+                color = notationColor,
+                textSize = with(density) { 18.dp.toPx() } * layoutScale,
+                typeface = musicTypeface,
+            ),
+        )
     }
 
     Surface(
@@ -75,17 +117,67 @@ fun MelodyStaffPreview(
                     scale = layoutScale,
                 )
             }
-            val lineSpacingDp = 12f
-            val rowTopPaddingDp = 28f
-            val rowBottomPaddingDp = 24f
-            val rowHeightDp = rowTopPaddingDp + (lineSpacingDp * 4f) + rowBottomPaddingDp
-            val rowGapDp = 2f
-            val canvasHeight = (
-                (
-                    (rowLayouts.size.coerceAtLeast(1) * rowHeightDp) +
-                        (((rowLayouts.size - 1).coerceAtLeast(0)) * rowGapDp)
-                    ) * layoutScale
-                ).dp
+            val availableWidthPx = with(density) { maxWidth.toPx() }
+            val pxPerDp = with(density) { 1.dp.toPx() }
+            val lineSpacingPx = with(density) { 12.dp.toPx() } * layoutScale
+            val rowGapPx = with(density) { 2.dp.toPx() } * layoutScale
+            val horizontalPaddingPx = with(density) { 6.dp.toPx() } * layoutScale
+            val measureGapPx = with(density) { 12.dp.toPx() } * layoutScale
+            val barInsetStartPx = with(density) { 12.dp.toPx() } * layoutScale
+            val barInsetEndPx = with(density) { 12.dp.toPx() } * layoutScale
+            val rowMetrics = remember(
+                notation,
+                rowLayouts,
+                paints,
+                availableWidthPx,
+                pxPerDp,
+                lineSpacingPx,
+                horizontalPaddingPx,
+                measureGapPx,
+                barInsetStartPx,
+                barInsetEndPx,
+            ) {
+                rowLayouts.mapIndexed { rowIndex, rowLayout ->
+                    measureStaffRowMetrics(
+                        notation = notation,
+                        rowLayout = rowLayout,
+                        rowIndex = rowIndex,
+                        availableWidthPx = availableWidthPx,
+                        pxPerDp = pxPerDp,
+                        lineSpacing = lineSpacingPx,
+                        scale = layoutScale,
+                        horizontalPadding = horizontalPaddingPx,
+                        measureGap = measureGapPx,
+                        barInsetStart = barInsetStartPx,
+                        barInsetEnd = barInsetEndPx,
+                        paints = paints,
+                    )
+                }
+            }
+            val rowTopsPx = remember(rowMetrics, rowGapPx) {
+                buildList {
+                    var currentTop = 0f
+                    rowMetrics.forEachIndexed { index, metric ->
+                        add(currentTop)
+                        currentTop += metric.height(lineSpacingPx)
+                        if (index != rowMetrics.lastIndex) {
+                            currentTop += rowGapPx
+                        }
+                    }
+                    if (isEmpty()) {
+                        add(0f)
+                    }
+                }
+            }
+            val canvasHeightPx = remember(rowMetrics, rowGapPx, lineSpacingPx) {
+                if (rowMetrics.isEmpty()) {
+                    StaffRowMetrics.default(lineSpacingPx).height(lineSpacingPx)
+                } else {
+                    rowMetrics.sumOf { it.height(lineSpacingPx).toDouble() }.toFloat() +
+                        (rowGapPx * (rowMetrics.size - 1).coerceAtLeast(0))
+                }
+            }
+            val canvasHeight = with(density) { canvasHeightPx.toDp() }
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -104,60 +196,22 @@ fun MelodyStaffPreview(
                         .fillMaxWidth()
                         .height(canvasHeight),
                 ) {
-                    val lineSpacing = lineSpacingDp.dp.toPx() * layoutScale
-                    val rowTopPadding = rowTopPaddingDp.dp.toPx() * layoutScale
-                    val rowBottomPadding = rowBottomPaddingDp.dp.toPx() * layoutScale
-                    val rowHeight = rowTopPadding + (lineSpacing * 4f) + rowBottomPadding
-                    val rowGap = rowGapDp.dp.toPx() * layoutScale
-                    val horizontalPadding = 6.dp.toPx() * layoutScale
-                    val measureGap = 12.dp.toPx() * layoutScale
+                    val lineSpacing = lineSpacingPx
+                    val horizontalPadding = horizontalPaddingPx
+                    val measureGap = measureGapPx
                     val ledgerHalfWidth = 12.dp.toPx() * layoutScale
-                    val barInsetStart = 12.dp.toPx() * layoutScale
-                    val barInsetEnd = 12.dp.toPx() * layoutScale
+                    val barInsetStart = barInsetStartPx
+                    val barInsetEnd = barInsetEndPx
                     val middleLineYOffset = lineSpacing * 2f
-
-                    val accidentalPaint = createMusicPaint(
-                        color = notationColor,
-                        textSize = 18.dp.toPx() * layoutScale,
-                        typeface = musicTypeface,
-                    )
-                    val clefPaint = createMusicPaint(
-                        color = notationColor,
-                        textSize = 38.dp.toPx() * layoutScale,
-                        typeface = musicTypeface,
-                    )
-                    val meterPaint = createMusicPaint(
-                        color = notationColor,
-                        textSize = 22.dp.toPx() * layoutScale,
-                        typeface = musicTypeface,
-                    )
-                    val restPaint = createMusicPaint(
-                        color = notationColor,
-                        textSize = 30.dp.toPx() * layoutScale,
-                        typeface = musicTypeface,
-                    )
-                    val noteheadPaint = createMusicPaint(
-                        color = notationColor,
-                        textSize = 30.dp.toPx() * layoutScale,
-                        typeface = musicTypeface,
-                    )
-                    val flagPaint = createMusicPaint(
-                        color = notationColor,
-                        textSize = 30.dp.toPx() * layoutScale,
-                        typeface = musicTypeface,
-                    )
-                    val dotPaint = createMusicPaint(
-                        color = notationColor,
-                        textSize = 18.dp.toPx() * layoutScale,
-                        typeface = musicTypeface,
-                    )
 
                     val anchors = mutableMapOf<Int, NoteAnchor>()
 
                     rowLayouts.forEachIndexed { rowIndex, rowLayout ->
+                        val rowMetric = rowMetrics.getOrNull(rowIndex)
+                            ?: StaffRowMetrics.default(lineSpacing)
                         val rowBars = rowLayout.bars
-                        val rowTop = rowIndex * (rowHeight + rowGap)
-                        val staffTop = rowTop + rowTopPadding
+                        val rowTop = rowTopsPx.getOrElse(rowIndex) { 0f }
+                        val staffTop = rowTop + rowMetric.topPadding
                         val staffBottom = staffTop + (lineSpacing * 4f)
                         val rowStartX = horizontalPadding
                         val rowEndX = size.width - horizontalPadding
@@ -166,7 +220,7 @@ fun MelodyStaffPreview(
                         val showRowMeter = notation.showMeter && rowIndex == 0
                         val prefixWidth = measurePrefixWidth(
                             notation = notation,
-                            pxPerDp = 1.dp.toPx(),
+                            pxPerDp = pxPerDp,
                             scale = layoutScale,
                             showClef = showRowClef,
                             showKeySignature = showRowKeySignature,
@@ -196,9 +250,9 @@ fun MelodyStaffPreview(
                             staffTop = staffTop,
                             staffBottom = staffBottom,
                             lineSpacing = lineSpacing,
-                            clefPaint = clefPaint,
-                            accidentalPaint = accidentalPaint,
-                            meterPaint = meterPaint,
+                            clefPaint = paints.clefPaint,
+                            accidentalPaint = paints.accidentalPaint,
+                            meterPaint = paints.meterPaint,
                             scale = layoutScale,
                             showClef = showRowClef,
                             showKeySignature = showRowKeySignature,
@@ -238,7 +292,7 @@ fun MelodyStaffPreview(
                                             staffStep = staffStep,
                                         )
                                         val noteheadLayout = layoutGlyph(
-                                            paint = noteheadPaint,
+                                            paint = paints.noteheadPaint,
                                             glyph = noteheadGlyphFor(symbol.duration),
                                             centerX = x,
                                             centerY = y,
@@ -297,7 +351,7 @@ fun MelodyStaffPreview(
                                         )
                                         drawNoteAccidental(
                                             note = note,
-                                            accidentalPaint = accidentalPaint,
+                                            accidentalPaint = paints.accidentalPaint,
                                             scale = layoutScale,
                                         )
                                         anchors[symbol.sequenceIndex] = NoteAnchor(
@@ -310,9 +364,9 @@ fun MelodyStaffPreview(
                                                 note = note,
                                                 middleLineY = middleLineY,
                                                 lineSpacing = lineSpacing,
-                                                noteheadPaint = noteheadPaint,
-                                                flagPaint = flagPaint,
-                                                dotPaint = dotPaint,
+                                                noteheadPaint = paints.noteheadPaint,
+                                                flagPaint = paints.flagPaint,
+                                                dotPaint = paints.dotPaint,
                                                 color = notationColor,
                                                 scale = layoutScale,
                                             )
@@ -325,8 +379,8 @@ fun MelodyStaffPreview(
                                             rest = rest,
                                             staffTop = staffTop,
                                             lineSpacing = lineSpacing,
-                                            restPaint = restPaint,
-                                            dotPaint = dotPaint,
+                                            restPaint = paints.restPaint,
+                                            dotPaint = paints.dotPaint,
                                             scale = layoutScale,
                                         )
                                     }
@@ -348,12 +402,12 @@ fun MelodyStaffPreview(
                                 .forEach { note ->
                                     drawNoteHead(
                                         note = note,
-                                        noteheadPaint = noteheadPaint,
+                                        noteheadPaint = paints.noteheadPaint,
                                     )
                                     drawAugmentationDot(
                                         note = note,
                                         lineSpacing = lineSpacing,
-                                        dotPaint = dotPaint,
+                                        dotPaint = paints.dotPaint,
                                         scale = layoutScale,
                                     )
                                 }
@@ -480,10 +534,366 @@ private data class NoteAnchor(
     val rowIndex: Int,
 )
 
+private data class StaffPaints(
+    val accidentalPaint: Paint,
+    val clefPaint: Paint,
+    val meterPaint: Paint,
+    val restPaint: Paint,
+    val noteheadPaint: Paint,
+    val flagPaint: Paint,
+    val dotPaint: Paint,
+)
+
+private data class StaffRowMetrics(
+    val topPadding: Float,
+    val bottomPadding: Float,
+) {
+    fun height(lineSpacing: Float): Float = topPadding + (lineSpacing * 4f) + bottomPadding
+
+    companion object {
+        fun default(lineSpacing: Float): StaffRowMetrics {
+            val topPadding = max(
+                lineSpacing * 1.2f,
+                lineSpacing,
+            )
+            val bottomPadding = max(
+                lineSpacing,
+                lineSpacing * 0.9f,
+            )
+            return StaffRowMetrics(
+                topPadding = topPadding,
+                bottomPadding = bottomPadding,
+            )
+        }
+    }
+}
+
 internal data class StaffRowLayout(
     val bars: List<MelodyBar>,
     val widthWeights: List<Float>,
 )
+
+private fun measureStaffRowMetrics(
+    notation: MelodyNotation,
+    rowLayout: StaffRowLayout,
+    rowIndex: Int,
+    availableWidthPx: Float,
+    pxPerDp: Float,
+    lineSpacing: Float,
+    scale: Float,
+    horizontalPadding: Float,
+    measureGap: Float,
+    barInsetStart: Float,
+    barInsetEnd: Float,
+    paints: StaffPaints,
+): StaffRowMetrics {
+    val staffTop = 0f
+    val staffBottom = lineSpacing * 4f
+    val middleLineY = staffTop + (lineSpacing * 2f)
+    val paddingSafety = lineSpacing * 0.35f
+    val tieDepth = lineSpacing * (20f / 12f)
+    val beamThickness = 4.dp.value * pxPerDp * scale
+    val beamGap = 3.dp.value * pxPerDp * scale
+    var minY = 0f
+    var maxY = staffBottom
+
+    fun include(layout: GlyphLayout) {
+        minY = min(minY, layout.top)
+        maxY = max(maxY, layout.bottom)
+    }
+
+    val showRowClef = notation.showClef && rowIndex == 0
+    val showRowKeySignature = notation.showKeySignature && rowIndex == 0
+    val showRowMeter = notation.showMeter && rowIndex == 0
+    if (showRowClef) {
+        val clefCenterY = staffCenterYForStep(
+            staffBottom = staffBottom,
+            lineSpacing = lineSpacing,
+            staffStep = notation.clef.symbolStaffStepFromBottom,
+        ) + clefVisualCenterYOffset(
+            clef = notation.clef,
+            lineSpacing = lineSpacing,
+        )
+        include(
+            layoutGlyph(
+                paint = paints.clefPaint,
+                glyph = notation.clef.symbol,
+                centerX = 0f,
+                centerY = clefCenterY,
+            ),
+        )
+    }
+    if (showRowKeySignature && notation.keySignature.accidentalCount > 0) {
+        val accidentalSymbol = notation.keySignature.accidentalType.symbol
+        notation.clef.keySignatureStaffSteps(
+            type = notation.keySignature.accidentalType,
+            count = notation.keySignature.accidentalCount,
+        ).forEach { staffStep ->
+            include(
+                layoutGlyph(
+                    paint = paints.accidentalPaint,
+                    glyph = accidentalSymbol,
+                    centerX = 0f,
+                    centerY = staffCenterYForStep(
+                        staffBottom = staffBottom,
+                        lineSpacing = lineSpacing,
+                        staffStep = staffStep,
+                    ),
+                ),
+            )
+        }
+    }
+    if (showRowMeter) {
+        include(
+            layoutGlyph(
+                paint = paints.meterPaint,
+                glyph = notation.meter.numerator.toPetalumaTimeSig(),
+                centerX = 0f,
+                centerY = staffTop + (lineSpacing * 1.5f),
+            ),
+        )
+        include(
+            layoutGlyph(
+                paint = paints.meterPaint,
+                glyph = notation.meter.denominator.toPetalumaTimeSig(),
+                centerX = 0f,
+                centerY = staffTop + (lineSpacing * 3.25f),
+            ),
+        )
+    }
+
+    val rowBars = rowLayout.bars
+    val rowStartX = horizontalPadding
+    val rowEndX = availableWidthPx - horizontalPadding
+    val prefixWidth = measurePrefixWidth(
+        notation = notation,
+        pxPerDp = pxPerDp,
+        scale = scale,
+        showClef = showRowClef,
+        showKeySignature = showRowKeySignature,
+        showMeter = showRowMeter,
+    )
+    val systemStartX = rowStartX + prefixWidth
+    val contentWidthForRow = (
+        rowEndX - systemStartX - (measureGap * (rowBars.size - 1))
+        ).coerceAtLeast(24.dp.value * pxPerDp)
+    val totalWeight = rowLayout.widthWeights.sum().coerceAtLeast(1f)
+    var measureCursorX = systemStartX
+
+    rowBars.forEachIndexed { barIndex, bar ->
+        val remainingWidth = (rowEndX - measureCursorX).coerceAtLeast(24.dp.value * pxPerDp)
+        val measureWidth = if (barIndex == rowBars.lastIndex) {
+            remainingWidth
+        } else {
+            (
+                contentWidthForRow *
+                    (rowLayout.widthWeights[barIndex] / totalWeight)
+                ).coerceAtLeast(24.dp.value * pxPerDp)
+        }
+        val measureStartX = measureCursorX
+        val measureEndX = if (barIndex == rowBars.lastIndex) {
+            rowEndX
+        } else {
+            measureStartX + measureWidth
+        }
+        val contentStartX = measureStartX + barInsetStart
+        val contentEndX = measureEndX - barInsetEnd
+        val contentWidth = (contentEndX - contentStartX).coerceAtLeast(24.dp.value * pxPerDp)
+
+        val positionedEvents = bar.events.map { event ->
+            val x = contentStartX +
+                (contentWidth * (event.startTick / notation.meter.barTicks.toFloat()))
+            when (val symbol = event.symbol) {
+                is MelodyNote -> {
+                    val staffStep = notation.clef.staffStepFor(symbol.pitch)
+                    val y = staffCenterYForStep(
+                        staffBottom = staffBottom,
+                        lineSpacing = lineSpacing,
+                        staffStep = staffStep,
+                    )
+                    PositionedBarEventLayout(
+                        startTick = event.startTick,
+                        symbol = symbol,
+                        note = PositionedNote(
+                            note = symbol,
+                            x = x,
+                            y = y,
+                            staffStep = staffStep,
+                            rowIndex = rowIndex,
+                            notehead = layoutGlyph(
+                                paint = paints.noteheadPaint,
+                                glyph = noteheadGlyphFor(symbol.duration),
+                                centerX = x,
+                                centerY = y,
+                            ),
+                        ),
+                    )
+                }
+
+                is MelodyRest -> PositionedBarEventLayout(
+                    startTick = event.startTick,
+                    symbol = symbol,
+                    rest = PositionedRest(
+                        rest = symbol,
+                        x = x,
+                    ),
+                )
+            }
+        }
+
+        val beamGroups = buildBeamGroups(
+            bar = bar,
+            positionedEvents = positionedEvents,
+            meter = notation.meter,
+            middleLineY = middleLineY,
+            lineSpacing = lineSpacing,
+        )
+        val beamedSequences = beamGroups
+            .flatMap { group -> group.notes.map { note -> note.note.sequenceIndex } }
+            .toSet()
+
+        positionedEvents.forEach { positioned ->
+            when (val symbol = positioned.symbol) {
+                is MelodyNote -> {
+                    val note = positioned.note ?: return@forEach
+                    include(note.notehead)
+                    symbol.pitch.displayAccidentalSymbol?.let { accidental ->
+                        include(
+                            layoutGlyph(
+                                paint = paints.accidentalPaint,
+                                glyph = accidental,
+                                centerX = note.notehead.left - (6.dp.value * pxPerDp * scale),
+                                centerY = note.y,
+                            ),
+                        )
+                    }
+                    if (symbol.sequenceIndex !in beamedSequences && symbol.duration.denominator != 1) {
+                        val stemUp = note.y >= middleLineY
+                        val stemEndY = note.standaloneStemEndY(
+                            stemUp = stemUp,
+                            lineSpacing = lineSpacing,
+                        )
+                        minY = min(minY, min(note.y, stemEndY))
+                        maxY = max(maxY, max(note.y, stemEndY))
+                        val flagGlyph = standaloneFlagGlyph(stemUp = stemUp)
+                        val flagCount = standaloneFlagCount(symbol.duration)
+                        val flagStackOffset = lineSpacing * 0.58f
+                        repeat(flagCount) { flagIndex ->
+                            val flagOriginY = if (stemUp) {
+                                stemEndY + (flagStackOffset * flagIndex)
+                            } else {
+                                stemEndY - (flagStackOffset * flagIndex)
+                            }
+                            include(
+                                layoutGlyphAtOrigin(
+                                    paint = paints.flagPaint,
+                                    glyph = flagGlyph,
+                                    originX = note.stemX(
+                                        stemUp = stemUp,
+                                        lineSpacing = lineSpacing,
+                                    ) - ((1.6.dp.value * pxPerDp * scale) / 2f),
+                                    originY = flagOriginY,
+                                ),
+                            )
+                        }
+                    }
+                    if (symbol.duration.dotted) {
+                        val dotCenterY = if (note.staffStep % 2 == 0) {
+                            note.y - (lineSpacing / 2f)
+                        } else {
+                            note.y
+                        }
+                        include(
+                            layoutGlyph(
+                                paint = paints.dotPaint,
+                                glyph = smuflGlyph(0xE1E7),
+                                centerX = note.notehead.right + (7.dp.value * pxPerDp * scale),
+                                centerY = dotCenterY,
+                            ),
+                        )
+                    }
+                    if (symbol.tieToNext) {
+                        maxY = max(maxY, note.notehead.bottom + tieDepth)
+                    }
+                }
+
+                is MelodyRest -> {
+                    val rest = positioned.rest ?: return@forEach
+                    val centerY = when (symbol.duration.denominator) {
+                        1 -> staffTop + (lineSpacing * 1.9f)
+                        2 -> staffTop + (lineSpacing * 2.4f)
+                        4 -> staffTop + (lineSpacing * 2.2f)
+                        else -> staffTop + (lineSpacing * 2.3f)
+                    }
+                    val restLayout = layoutGlyph(
+                        paint = paints.restPaint,
+                        glyph = when (symbol.duration.denominator) {
+                            1 -> smuflGlyph(0xE4E3)
+                            2 -> smuflGlyph(0xE4E4)
+                            4 -> smuflGlyph(0xE4E5)
+                            8 -> smuflGlyph(0xE4E6)
+                            16 -> smuflGlyph(0xE4E7)
+                            32 -> smuflGlyph(0xE4E8)
+                            else -> smuflGlyph(0xE4E5)
+                        },
+                        centerX = rest.x,
+                        centerY = centerY,
+                    )
+                    include(restLayout)
+                    if (symbol.duration.dotted) {
+                        include(
+                            layoutGlyph(
+                                paint = paints.dotPaint,
+                                glyph = smuflGlyph(0xE1E7),
+                                centerX = restLayout.right + (6.dp.value * pxPerDp * scale),
+                                centerY = centerY,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
+        beamGroups.forEach { group ->
+            group.notes.forEach { note ->
+                val stemX = note.stemX(stemUp = group.stemUp, lineSpacing = lineSpacing)
+                val beamEdgeY = group.beamEdgeYAt(stemX)
+                minY = min(minY, min(note.y, beamEdgeY))
+                maxY = max(maxY, max(note.y, beamEdgeY))
+            }
+
+            val firstStemX = group.notes.first().stemX(stemUp = group.stemUp, lineSpacing = lineSpacing)
+            val lastStemX = group.notes.last().stemX(stemUp = group.stemUp, lineSpacing = lineSpacing)
+            repeat(group.beamCount) { beamIndex ->
+                val offset = beamIndex * (beamThickness + beamGap)
+                val startEdgeY = if (group.stemUp) {
+                    group.beamEdgeYAt(firstStemX) - offset
+                } else {
+                    group.beamEdgeYAt(firstStemX) + offset
+                }
+                val endEdgeY = if (group.stemUp) {
+                    group.beamEdgeYAt(lastStemX) - offset
+                } else {
+                    group.beamEdgeYAt(lastStemX) + offset
+                }
+                if (group.stemUp) {
+                    minY = min(minY, min(startEdgeY - beamThickness, endEdgeY - beamThickness))
+                    maxY = max(maxY, max(startEdgeY, endEdgeY))
+                } else {
+                    minY = min(minY, min(startEdgeY, endEdgeY))
+                    maxY = max(maxY, max(startEdgeY + beamThickness, endEdgeY + beamThickness))
+                }
+            }
+        }
+
+        measureCursorX = measureEndX + measureGap
+    }
+
+    return StaffRowMetrics(
+        topPadding = max((-minY) + paddingSafety, lineSpacing * 1.2f),
+        bottomPadding = max((maxY - staffBottom) + paddingSafety, lineSpacing),
+    )
+}
 
 internal fun layoutStaffRows(
     notation: MelodyNotation,
@@ -1224,22 +1634,36 @@ private fun standaloneFlagCount(
     }
 }
 
-private fun PositionedNote.standaloneStemEndY(
+private fun standaloneStemEndY(
+    noteY: Float,
+    duration: MelodyDuration,
     stemUp: Boolean,
     lineSpacing: Float,
 ): Float {
     val baseStemLength = lineSpacing * 2.7f
-    val extraLength = when (note.duration.denominator) {
+    val extraLength = when (duration.denominator) {
         16 -> lineSpacing * 0.15f
         32 -> lineSpacing * 0.3f
         else -> 0f
     }
     val stemLength = baseStemLength + extraLength
     return if (stemUp) {
-        y - stemLength
+        noteY - stemLength
     } else {
-        y + stemLength
+        noteY + stemLength
     }
+}
+
+private fun PositionedNote.standaloneStemEndY(
+    stemUp: Boolean,
+    lineSpacing: Float,
+): Float {
+    return standaloneStemEndY(
+        noteY = y,
+        duration = note.duration,
+        stemUp = stemUp,
+        lineSpacing = lineSpacing,
+    )
 }
 
 private fun MelodyMeter.primaryBeatTicks(): Int {

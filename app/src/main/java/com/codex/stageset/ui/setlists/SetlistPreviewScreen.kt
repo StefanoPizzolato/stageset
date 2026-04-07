@@ -48,8 +48,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
@@ -62,7 +61,6 @@ import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.ui.common.ChartPreview
 import com.codex.stageset.ui.common.PreviewRenderOptions
 import com.codex.stageset.ui.common.PreviewSettingsDialog
-import com.codex.stageset.ui.common.buildPreviewTitle
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -123,8 +121,9 @@ fun SetlistPreviewRoute(
             query = songSearchQuery,
         )
     }
-    val setlistTitle = buildSetlistPlayTitle(
-        setlistName = setlist?.name,
+    val compactTopBar = LocalConfiguration.current.screenWidthDp < 600
+    val setlistTitle = setlist?.name?.ifBlank { "Play" } ?: "Play"
+    val currentSongTitle = buildSongPlayTitle(
         preset = currentSong?.preset.orEmpty(),
         keySignature = currentSong?.keySignature.orEmpty(),
         songName = currentSong?.name.orEmpty(),
@@ -204,8 +203,14 @@ fun SetlistPreviewRoute(
                             Icon(Icons.Outlined.Tune, contentDescription = "Preview settings")
                         }
                         currentSong?.let {
-                            FilledTonalButton(onClick = { onEditSong(it.songId, currentSongIndex) }) {
-                                Icon(Icons.Outlined.Edit, contentDescription = "Edit song")
+                            if (compactTopBar) {
+                                IconButton(onClick = { onEditSong(it.songId, currentSongIndex) }) {
+                                    Icon(Icons.Outlined.Edit, contentDescription = "Edit song")
+                                }
+                            } else {
+                                FilledTonalButton(onClick = { onEditSong(it.songId, currentSongIndex) }) {
+                                    Icon(Icons.Outlined.Edit, contentDescription = "Edit song")
+                                }
                             }
                         }
                     },
@@ -245,14 +250,18 @@ fun SetlistPreviewRoute(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = sidePadding, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            val previousSongTitle = previousSong?.let {
-                                buildPreviewTitle(it.preset, it.keySignature, it.name)
-                            } ?: AnnotatedString("")
-                            val nextSongTitle = nextSong?.let {
-                                buildPreviewTitle(it.preset, it.keySignature, it.name)
-                            } ?: AnnotatedString("")
+                            val previousSongTitle = buildSongPlayTitle(
+                                preset = previousSong?.preset.orEmpty(),
+                                keySignature = previousSong?.keySignature.orEmpty(),
+                                songName = previousSong?.name.orEmpty(),
+                            )
+                            val nextSongTitle = buildSongPlayTitle(
+                                preset = nextSong?.preset.orEmpty(),
+                                keySignature = nextSong?.keySignature.orEmpty(),
+                                songName = nextSong?.name.orEmpty(),
+                            )
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -261,9 +270,8 @@ fun SetlistPreviewRoute(
                                 PlayTransportButton(
                                     onClick = { currentSongIndex-- },
                                     enabled = canGoBack,
-                                    directionLabel = "Back",
                                     songTitle = previousSongTitle,
-                                    iconBeforeLabel = true,
+                                    iconBeforeTitle = true,
                                     modifier = Modifier
                                         .weight(1f),
                                 ) {
@@ -272,15 +280,23 @@ fun SetlistPreviewRoute(
                                 PlayTransportButton(
                                     onClick = { currentSongIndex++ },
                                     enabled = canGoForward,
-                                    directionLabel = "Forward",
                                     songTitle = nextSongTitle,
-                                    iconBeforeLabel = false,
+                                    iconBeforeTitle = false,
                                     modifier = Modifier
                                         .weight(1f),
                                 ) {
                                     Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
                                 }
                             }
+                            Text(
+                                text = currentSongTitle,
+                                modifier = Modifier.fillMaxWidth(),
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                             Text(
                                 text = "${currentSongIndex + 1} / ${songs.size}",
                                 modifier = Modifier.fillMaxWidth(),
@@ -337,64 +353,64 @@ fun SetlistPreviewRoute(
 private fun PlayTransportButton(
     onClick: () -> Unit,
     enabled: Boolean,
-    directionLabel: String,
-    songTitle: AnnotatedString,
-    iconBeforeLabel: Boolean,
+    songTitle: String,
+    iconBeforeTitle: Boolean,
     modifier: Modifier = Modifier,
     icon: @Composable () -> Unit,
 ) {
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.height(92.dp),
+        modifier = modifier.height(80.dp),
     ) {
-        Column(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (iconBeforeLabel) {
-                    icon()
-                    Text(text = directionLabel, modifier = Modifier.padding(start = 8.dp))
-                } else {
-                    Text(text = directionLabel, modifier = Modifier.padding(end = 8.dp))
-                    icon()
-                }
+            if (iconBeforeTitle) {
+                icon()
+                Text(
+                    text = songTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .weight(1f),
+                )
+            } else {
+                Text(
+                    text = songTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(end = 8.dp)
+                        .weight(1f),
+                )
+                icon()
             }
-            Text(
-                text = songTitle,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-            )
         }
     }
 }
 
-private fun buildSetlistPlayTitle(
-    setlistName: String?,
+private fun buildSongPlayTitle(
     preset: String,
     keySignature: String,
     songName: String,
-): AnnotatedString {
-    val resolvedSetlistName = setlistName?.ifBlank { "Play" } ?: "Play"
-    val songTitle = buildPreviewTitle(
-        preset = preset,
-        keySignature = keySignature,
-        name = songName.ifBlank { "Song" },
-    )
-    return buildAnnotatedString {
-        append(resolvedSetlistName)
-        append(" - ")
-        append(songTitle)
+): String {
+    val resolvedSongName = songName.ifBlank { "Song" }
+    val lead = listOfNotNull(
+        preset.takeIf { it.isNotBlank() },
+        keySignature.takeIf { it.isNotBlank() },
+    ).joinToString(separator = " - ")
+
+    return if (lead.isBlank()) {
+        resolvedSongName
+    } else {
+        "$lead | $resolvedSongName"
     }
 }
 

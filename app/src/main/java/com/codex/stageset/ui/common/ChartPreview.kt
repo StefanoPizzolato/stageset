@@ -54,6 +54,13 @@ private val KnownSectionHeadingColors = mapOf(
     "ending" to Color(0xFF66E4C4),
 )
 
+private const val WordJoiner = '\u2060'
+
+internal data class ProtectedChordText(
+    val text: String,
+    val accentSpans: List<PreviewSpan>,
+)
+
 @Composable
 fun ChartPreview(
     title: String,
@@ -211,10 +218,14 @@ private fun PreviewLinesColumn(
                 PreviewLineType.Chord -> {
                     val sectionChordColor = line.sectionColorGroup?.let(sectionHeadingColors::get)
                     val chordColor = sectionChordColor ?: MaterialTheme.colorScheme.primary
+                    val protectedChordText = protectSlashChordBreaks(
+                        text = line.text,
+                        accentSpans = line.accentSpans,
+                    )
                     Text(
                         text = buildAnnotatedString {
-                            append(line.text)
-                            line.accentSpans.forEach { span ->
+                            append(protectedChordText.text)
+                            protectedChordText.accentSpans.forEach { span ->
                                 addStyle(
                                     SpanStyle(
                                         color = sectionChordColor ?: MaterialTheme.colorScheme.secondary,
@@ -284,6 +295,51 @@ private fun PreviewLinesColumn(
             }
         }
     }
+}
+
+internal fun protectSlashChordBreaks(
+    text: String,
+    accentSpans: List<PreviewSpan> = emptyList(),
+): ProtectedChordText {
+    if ('/' !in text) {
+        return ProtectedChordText(
+            text = text,
+            accentSpans = accentSpans,
+        )
+    }
+
+    val transformed = StringBuilder(text.length)
+    val boundaryMap = IntArray(text.length + 1)
+
+    text.forEachIndexed { index, character ->
+        boundaryMap[index] = transformed.length
+        val previous = text.getOrNull(index - 1)
+        val next = text.getOrNull(index + 1)
+        val isSlashChordBoundary = character == '/' &&
+            previous != null &&
+            next != null &&
+            !previous.isWhitespace() &&
+            !next.isWhitespace()
+
+        if (isSlashChordBoundary) {
+            transformed.append(WordJoiner)
+            transformed.append(character)
+            transformed.append(WordJoiner)
+        } else {
+            transformed.append(character)
+        }
+    }
+    boundaryMap[text.length] = transformed.length
+
+    return ProtectedChordText(
+        text = transformed.toString(),
+        accentSpans = accentSpans.map { span ->
+            PreviewSpan(
+                start = boundaryMap[span.start],
+                endExclusive = boundaryMap[span.endExclusive],
+            )
+        },
+    )
 }
 
 private fun buildSectionHeadingColors(

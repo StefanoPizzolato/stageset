@@ -20,7 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -42,8 +44,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.codex.stageset.chart.TransposeDirection
@@ -141,6 +148,7 @@ fun SongEditorRoute(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val compactTopBar = maxWidth < 600.dp
         val wideLayout = maxWidth >= 1000.dp
         val formPaneWidth = maxWidth * 0.42f
         val formScroll = rememberScrollState()
@@ -149,7 +157,13 @@ fun SongEditorRoute(
             containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
             topBar = {
                 TopAppBar(
-                    title = { Text(if (songId > 0) "Edit Song" else "New Song") },
+                    title = {
+                        Text(
+                            text = if (songId > 0) "Edit Song" else "New Song",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
@@ -157,38 +171,70 @@ fun SongEditorRoute(
                     },
                     actions = {
                         if (songId > 0) {
-                            TextButton(
-                                onClick = { showDeleteConfirmation = true },
-                            ) {
-                                Icon(Icons.Outlined.Delete, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Delete")
+                            if (compactTopBar) {
+                                IconButton(onClick = { showDeleteConfirmation = true }) {
+                                    Icon(Icons.Outlined.Delete, contentDescription = "Delete song")
+                                }
+                            } else {
+                                TextButton(
+                                    onClick = { showDeleteConfirmation = true },
+                                ) {
+                                    Icon(Icons.Outlined.Delete, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Delete")
+                                }
                             }
                         }
-                        FilledTonalButton(
-                            onClick = {
-                                scope.launch {
-                                    isSaving = true
-                                    feedbackMessage = null
-                                    songRepository.saveSong(
-                                        songId = songId.takeIf { it > 0 },
-                                        draft = SongDraft(
-                                            name = name,
-                                            artist = artist,
-                                            preset = preset,
-                                            keySignature = keySignature,
-                                            chart = chart,
-                                        ),
-                                    )
-                                    isSaving = false
-                                    onBack()
-                                }
-                            },
-                            enabled = name.isNotBlank() && !isSaving,
-                        ) {
-                            Icon(Icons.Outlined.Save, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Save")
+                        if (compactTopBar) {
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        isSaving = true
+                                        feedbackMessage = null
+                                        songRepository.saveSong(
+                                            songId = songId.takeIf { it > 0 },
+                                            draft = SongDraft(
+                                                name = name,
+                                                artist = artist,
+                                                preset = preset,
+                                                keySignature = keySignature,
+                                                chart = chart,
+                                            ),
+                                        )
+                                        isSaving = false
+                                        onBack()
+                                    }
+                                },
+                                enabled = name.isNotBlank() && !isSaving,
+                            ) {
+                                Icon(Icons.Outlined.Save, contentDescription = "Save song")
+                            }
+                        } else {
+                            FilledTonalButton(
+                                onClick = {
+                                    scope.launch {
+                                        isSaving = true
+                                        feedbackMessage = null
+                                        songRepository.saveSong(
+                                            songId = songId.takeIf { it > 0 },
+                                            draft = SongDraft(
+                                                name = name,
+                                                artist = artist,
+                                                preset = preset,
+                                                keySignature = keySignature,
+                                                chart = chart,
+                                            ),
+                                        )
+                                        isSaving = false
+                                        onBack()
+                                    }
+                                },
+                                enabled = name.isNotBlank() && !isSaving,
+                            ) {
+                                Icon(Icons.Outlined.Save, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save")
+                            }
                         }
                     },
                 )
@@ -365,6 +411,8 @@ private fun SongForm(
     onImportUrlChange: (String) -> Unit,
     onImportClick: () -> Unit,
 ) {
+    var showNotationHelp by remember { mutableStateOf(false) }
+
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -469,8 +517,112 @@ private fun SongForm(
             label = { Text("Chart") },
             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
             supportingText = {
-                Text("Use @ ... @ blocks for melody MML, for example: @ key=Ebm meter=4/4 cleff=treble o4 l4 c d e f @")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text("To write notation use @ ... @ blocks with MML notation")
+                    TextButton(
+                        onClick = { showNotationHelp = true },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = "View MML glossary",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("view glossary")
+                    }
+                }
             },
         )
+
+        if (showNotationHelp) {
+            NotationHelpDialog(
+                onDismiss = { showNotationHelp = false },
+            )
+        }
     }
+}
+
+@Composable
+private fun NotationHelpDialog(
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        },
+        title = {
+            Text("MML glossary")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                GlossaryLine(
+                    label = "Blocks",
+                    value = "Wrap a melody in @ ... @ so it renders as staff notation in the chart.",
+                )
+                GlossaryLine(
+                    label = "Example",
+                    value = "@ key=Ebm meter=4/4 cleff=treble o4 l8 c d eb f g4 r8 bb8&bb8 @",
+                    monospace = true,
+                )
+                GlossaryLine(
+                    label = "Notes",
+                    value = "c d e f g a b",
+                )
+                GlossaryLine(
+                    label = "Accidentals",
+                    value = "# sharp, b flat, n natural",
+                )
+                GlossaryLine(
+                    label = "Octave",
+                    value = "o4 sets the octave. > moves up one octave. < moves down one octave.",
+                )
+                GlossaryLine(
+                    label = "Rhythm",
+                    value = "l4 sets the default length. c8 or r16 also becomes the new default for what follows. Dots are never sticky, so write c4. or r8. each time.",
+                )
+                GlossaryLine(
+                    label = "Rests",
+                    value = "r4 quarter rest, r8 eighth rest, r16 sixteenth rest",
+                )
+                GlossaryLine(
+                    label = "Ties",
+                    value = "c8&c8 ties two notes of the same pitch together.",
+                )
+                GlossaryLine(
+                    label = "Score settings",
+                    value = "key=Ebm, meter=3/4, cleff=treble, cleff=bass, cleff=alto, cleff=tenor, t120",
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun GlossaryLine(
+    label: String,
+    value: String,
+    monospace: Boolean = false,
+) {
+    Text(
+        text = buildAnnotatedString {
+            pushStyle(SpanStyle(fontWeight = FontWeight.SemiBold))
+            append("$label: ")
+            pop()
+            append(value)
+        },
+        style = if (monospace) {
+            MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+        } else {
+            MaterialTheme.typography.bodyMedium
+        },
+        color = MaterialTheme.colorScheme.onSurface,
+    )
 }

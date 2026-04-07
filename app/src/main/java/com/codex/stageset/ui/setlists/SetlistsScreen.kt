@@ -48,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.codex.stageset.data.repository.SetlistDetail
 import com.codex.stageset.data.repository.SetlistRepository
@@ -109,6 +110,7 @@ fun SetlistsRoute(
     val selectedDetail by selectedDetailFlow.collectAsState(initial = null)
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val compactTopBar = maxWidth < 600.dp
         val wideLayout = maxWidth >= 1000.dp
 
         Scaffold(
@@ -118,21 +120,42 @@ fun SetlistsRoute(
             },
             topBar = {
                 TopAppBar(
-                    title = { Text("Setlists") },
+                    title = {
+                        Text(
+                            text = "Setlists",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
                     actions = {
-                        TextButton(
-                            onClick = {
-                                importArchiveLauncher.launch(
-                                    arrayOf("application/json", "text/plain", "*/*"),
-                                )
-                            },
-                        ) {
-                            Text("Import Setlist")
-                        }
-                        FilledTonalButton(onClick = onCreateSetlist) {
-                            Icon(Icons.Outlined.Add, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("New Setlist")
+                        if (compactTopBar) {
+                            androidx.compose.material3.IconButton(
+                                onClick = {
+                                    importArchiveLauncher.launch(
+                                        arrayOf("application/json", "text/plain", "*/*"),
+                                    )
+                                },
+                            ) {
+                                Icon(Icons.Outlined.EditNote, contentDescription = "Import setlist")
+                            }
+                            androidx.compose.material3.IconButton(onClick = onCreateSetlist) {
+                                Icon(Icons.Outlined.Add, contentDescription = "New setlist")
+                            }
+                        } else {
+                            TextButton(
+                                onClick = {
+                                    importArchiveLauncher.launch(
+                                        arrayOf("application/json", "text/plain", "*/*"),
+                                    )
+                                },
+                            ) {
+                                Text("Import Setlist")
+                            }
+                            FilledTonalButton(onClick = onCreateSetlist) {
+                                Icon(Icons.Outlined.Add, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("New Setlist")
+                            }
                         }
                     },
                 )

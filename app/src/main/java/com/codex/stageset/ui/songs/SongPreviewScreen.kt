@@ -32,6 +32,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.codex.stageset.data.repository.PreviewSettingsRepository
 import com.codex.stageset.data.repository.Song
@@ -61,6 +63,7 @@ fun SongPreviewRoute(
     val previewSettings by previewSettingsRepository.settings.collectAsState()
     var textSizeSp by rememberSaveable { mutableIntStateOf(20) }
     var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
+    val compactTopBar = LocalConfiguration.current.screenWidthDp < 600
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
@@ -70,6 +73,8 @@ fun SongPreviewRoute(
                     Text(
                         text = song?.let { buildPreviewTitle(it.preset, it.keySignature, it.name) }
                             ?: buildPreviewTitle("", "", "Song Preview"),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
@@ -97,8 +102,14 @@ fun SongPreviewRoute(
                         Icon(Icons.Outlined.Tune, contentDescription = "Preview settings")
                     }
                     song?.let {
-                        FilledTonalButton(onClick = { onEditSong(it.id) }) {
-                            Icon(Icons.Outlined.Edit, contentDescription = "Edit song")
+                        if (compactTopBar) {
+                            IconButton(onClick = { onEditSong(it.id) }) {
+                                Icon(Icons.Outlined.Edit, contentDescription = "Edit song")
+                            }
+                        } else {
+                            FilledTonalButton(onClick = { onEditSong(it.id) }) {
+                                Icon(Icons.Outlined.Edit, contentDescription = "Edit song")
+                            }
                         }
                     }
                 },

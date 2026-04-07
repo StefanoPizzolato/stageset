@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.codex.stageset.data.repository.SetlistArchiveDocument
 import com.codex.stageset.data.repository.SetlistDetail
@@ -145,6 +146,7 @@ fun SetlistEditorRoute(
     val songMap = remember(allSongs) { allSongs.associateBy { it.id } }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val compactTopBar = maxWidth < 600.dp
         val wideLayout = maxWidth >= 760.dp
         val songPoolWidth = (maxWidth * 0.4f).coerceIn(320.dp, 460.dp)
 
@@ -155,7 +157,13 @@ fun SetlistEditorRoute(
             },
             topBar = {
                 TopAppBar(
-                    title = { Text(if (setlistId > 0) "Edit Setlist" else "New Setlist") },
+                    title = {
+                        Text(
+                            text = if (setlistId > 0) "Edit Setlist" else "New Setlist",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
@@ -163,51 +171,96 @@ fun SetlistEditorRoute(
                     },
                     actions = {
                         if (setlistId > 0) {
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        runCatching {
-                                            setlistRepository.exportSetlistArchive(setlistId).getOrThrow()
-                                        }.onSuccess { archiveDocument ->
-                                            pendingArchiveDocument = archiveDocument
-                                            exportArchiveLauncher.launch(archiveDocument.suggestedFileName)
-                                        }.onFailure { throwable ->
-                                            snackbarHostState.showSnackbar(
-                                                throwable.message ?: "Couldn't save that archive.",
-                                            )
+                            if (compactTopBar) {
+                                IconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            runCatching {
+                                                setlistRepository.exportSetlistArchive(setlistId).getOrThrow()
+                                            }.onSuccess { archiveDocument ->
+                                                pendingArchiveDocument = archiveDocument
+                                                exportArchiveLauncher.launch(archiveDocument.suggestedFileName)
+                                            }.onFailure { throwable ->
+                                                snackbarHostState.showSnackbar(
+                                                    throwable.message ?: "Couldn't save that archive.",
+                                                )
+                                            }
                                         }
-                                    }
-                                },
-                            ) {
-                                Text("Export Setlist")
-                            }
-                            TextButton(
-                                onClick = { showDeleteConfirmation = true },
-                            ) {
-                                Icon(Icons.Outlined.Delete, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Delete")
+                                    },
+                                ) {
+                                    Icon(Icons.Outlined.ArrowDownward, contentDescription = "Export setlist")
+                                }
+                                IconButton(onClick = { showDeleteConfirmation = true }) {
+                                    Icon(Icons.Outlined.Delete, contentDescription = "Delete setlist")
+                                }
+                            } else {
+                                TextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            runCatching {
+                                                setlistRepository.exportSetlistArchive(setlistId).getOrThrow()
+                                            }.onSuccess { archiveDocument ->
+                                                pendingArchiveDocument = archiveDocument
+                                                exportArchiveLauncher.launch(archiveDocument.suggestedFileName)
+                                            }.onFailure { throwable ->
+                                                snackbarHostState.showSnackbar(
+                                                    throwable.message ?: "Couldn't save that archive.",
+                                                )
+                                            }
+                                        }
+                                    },
+                                ) {
+                                    Text("Export Setlist")
+                                }
+                                TextButton(
+                                    onClick = { showDeleteConfirmation = true },
+                                ) {
+                                    Icon(Icons.Outlined.Delete, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Delete")
+                                }
                             }
                         }
-                        FilledTonalButton(
-                            onClick = {
-                                scope.launch {
-                                    setlistRepository.saveSetlist(
-                                        setlistId = setlistId.takeIf { it > 0 },
-                                        draft = SetlistDraft(
-                                            name = name,
-                                            notes = notes,
-                                            songIds = queuedSongIds.toList(),
-                                        ),
-                                    )
-                                    onBack()
-                                }
-                            },
-                            enabled = name.isNotBlank(),
-                        ) {
-                            Icon(Icons.Outlined.Save, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Save")
+                        if (compactTopBar) {
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        setlistRepository.saveSetlist(
+                                            setlistId = setlistId.takeIf { it > 0 },
+                                            draft = SetlistDraft(
+                                                name = name,
+                                                notes = notes,
+                                                songIds = queuedSongIds.toList(),
+                                            ),
+                                        )
+                                        onBack()
+                                    }
+                                },
+                                enabled = name.isNotBlank(),
+                            ) {
+                                Icon(Icons.Outlined.Save, contentDescription = "Save setlist")
+                            }
+                        } else {
+                            FilledTonalButton(
+                                onClick = {
+                                    scope.launch {
+                                        setlistRepository.saveSetlist(
+                                            setlistId = setlistId.takeIf { it > 0 },
+                                            draft = SetlistDraft(
+                                                name = name,
+                                                notes = notes,
+                                                songIds = queuedSongIds.toList(),
+                                            ),
+                                        )
+                                        onBack()
+                                    }
+                                },
+                                enabled = name.isNotBlank(),
+                            ) {
+                                Icon(Icons.Outlined.Save, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save")
+                            }
                         }
                     },
                 )

@@ -35,7 +35,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.codex.stageset.data.repository.SongRepository
 import com.codex.stageset.data.repository.SongSummary
@@ -61,17 +63,30 @@ fun SongsRoute(
             }.contains(query.trim(), ignoreCase = true)
         }
     }
+    val compactTopBar = LocalConfiguration.current.screenWidthDp < 600
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
         topBar = {
             TopAppBar(
-                title = { Text("Songs") },
+                title = {
+                    Text(
+                        text = "Songs",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 actions = {
-                    FilledTonalButton(onClick = onCreateSong) {
-                        Icon(Icons.Outlined.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("New Song")
+                    if (compactTopBar) {
+                        androidx.compose.material3.IconButton(onClick = onCreateSong) {
+                            Icon(Icons.Outlined.Add, contentDescription = "New song")
+                        }
+                    } else {
+                        FilledTonalButton(onClick = onCreateSong) {
+                            Icon(Icons.Outlined.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("New Song")
+                        }
                     }
                 },
             )
