@@ -12,3 +12,10 @@ gradle-8.9-bin.zip
 ui-*.xml
 window_dump_*.xml
 home.png
+emu-*.png
+emu-*.jpg
+section-colors.png
+tmp/
+tmp2/
+tmp3/
+tmp4/

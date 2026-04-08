@@ -457,7 +457,7 @@ gradle/
 
 The app is configured with:
 
-- `applicationId`: `com.codex.stageset`
+- `applicationId`: `com.it.sunnysiteup.stageset`
 - `minSdk`: `26`
 - `targetSdk`: `35`
 - `compileSdk`: `35`

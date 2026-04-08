@@ -10,7 +10,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.codex.stageset"
+        applicationId = "com.it.sunnysiteup.stageset"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
