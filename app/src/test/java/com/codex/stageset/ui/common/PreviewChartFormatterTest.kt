@@ -89,8 +89,8 @@ class PreviewChartFormatterTest {
         assertEquals(
             """
             [Verse]
-            Bb7  F
-            Eb   Bb
+            Bb7   F
+            Eb    Bb
             """.trimIndent(),
             buildPreviewLines(
                 chart = chart,
@@ -190,7 +190,7 @@ class PreviewChartFormatterTest {
         assertEquals(
             """
             [Verse 1]
-            Ebm    Ab7    Gb    Bb7
+            Ebm   Ab7   Gb   Bb7
 
             [Verse 2]
             """.trimIndent(),
@@ -299,7 +299,7 @@ class PreviewChartFormatterTest {
         assertEquals(
             """
             [Verse]
-            :F  Am: x2
+            :F   Am: x2
             o4 l4 c d
             """.trimIndent(),
             buildPreviewLines(
@@ -330,7 +330,7 @@ class PreviewChartFormatterTest {
         assertEquals(
             """
             [Verse 1]
-            :F  Am: x2
+            :F   Am: x2
             @
             o4 l4 c d
             @
@@ -360,7 +360,7 @@ class PreviewChartFormatterTest {
         )
 
         assertEquals("[Verse]", rendered[0].text)
-        assertEquals(":F  Am: x2   G  C  F  Am", rendered[1].text)
+        assertEquals(":F   Am: x2   G   C   F   Am", rendered[1].text)
         assertTrue(rendered[1].accentSpans.isNotEmpty())
     }
 
@@ -398,7 +398,7 @@ class PreviewChartFormatterTest {
         assertEquals(
             """
             [Verse]
-            :F  Am: x2
+            :F   Am: x2
             """.trimIndent(),
             buildPreviewLines(resolved.chart, resolved.options).joinToString("\n") { it.text },
         )
@@ -420,7 +420,7 @@ class PreviewChartFormatterTest {
         assertEquals(
             """
             [Chorus]
-            :Ebm    Ab: x6   G    Gb7
+            :Ebm    Ab: x6   G   Gb7
             """.trimIndent(),
             buildPreviewLines(
                 chart = chart,
@@ -497,7 +497,7 @@ class PreviewChartFormatterTest {
         assertEquals(
             """
             [Verse]
-            :Am  C  D: x2
+            :Am   C   D: x2
             """.trimIndent(),
             buildPreviewLines(
                 chart = chart,
@@ -525,8 +525,40 @@ class PreviewChartFormatterTest {
         assertEquals("[Verse]", rendered[0].text)
         assertNotEquals("EmD", rendered[1].text)
         assertNotEquals("EmD", rendered[2].text)
-        assertTrue(rendered[1].text.contains(Regex("""Em\s+D""")))
-        assertTrue(rendered[2].text.contains(Regex("""Em\s+D""")))
+        assertTrue(rendered[1].text.contains(Regex("""Em\s{3,}D""")))
+        assertTrue(rendered[2].text.contains(Regex("""Em\s{3,}D""")))
+    }
+
+    @Test
+    fun buildPreviewLines_normalizesSavedCompressedChordSpacingToMinimumThreeSpaces() {
+        val chart = """
+            [Verse]
+            :F  Am: x2
+        """.trimIndent()
+
+        val rendered = buildPreviewLines(
+            chart = chart,
+            options = PreviewRenderOptions(showLyrics = false),
+        )
+
+        assertEquals("[Verse]", rendered[0].text)
+        assertEquals(":F   Am: x2", rendered[1].text)
+    }
+
+    @Test
+    fun buildPreviewLines_normalizesAdjacentSlashChordsInsideSavedCompressedRepeats() {
+        val chart = """
+            [Verse]
+            :Bm7/AG#m7b5: x2
+        """.trimIndent()
+
+        val rendered = buildPreviewLines(
+            chart = chart,
+            options = PreviewRenderOptions(showLyrics = false),
+        )
+
+        assertEquals("[Verse]", rendered[0].text)
+        assertTrue(rendered[1].text.matches(Regex(""":Bm7/A\s{3,}G#m7b5: x2""")))
     }
 
     @Test
@@ -685,7 +717,7 @@ class PreviewChartFormatterTest {
             """
             [Verse]
             Amazing grace how sweet...
-            F  Am
+            F   Am
             """.trimIndent(),
             buildPreviewLines(
                 chart = chart,
@@ -718,6 +750,51 @@ class PreviewChartFormatterTest {
         assertTrue(rendered[1].text.contains(Regex("""Ebm\s+Ab7""")))
         assertTrue(rendered[1].text.length < "Ebm                Ab7".length)
         assertEquals("Stevie sings", rendered[2].text)
+    }
+
+    @Test
+    fun buildPreviewLines_twoColumnChordOnlyViewKeepsMinimumThreeSpacesBetweenChords() {
+        val chart = """
+            [Verse]
+            EmD
+        """.trimIndent()
+
+        val rendered = buildPreviewLines(
+            chart = chart,
+            options = PreviewRenderOptions(
+                showLyrics = false,
+                twoColumns = true,
+            ),
+        )
+
+        assertEquals("[Verse]", rendered[0].text)
+        assertEquals("Em   D", rendered[1].text)
+    }
+
+    @Test
+    fun buildPreviewLines_compressModeAlignsWrappedChordsIntoTableLikeColumns() {
+        val chart = """
+            [Verse]
+            Ebm7   Ab13   Gbsus4   Bb7/D   C#m7   F#sus4
+        """.trimIndent()
+
+        val rendered = buildPreviewLines(
+            chart = chart,
+            options = PreviewRenderOptions(
+                showLyrics = false,
+                compressChords = true,
+                twoColumns = true,
+            ),
+        ).filter { it.type != PreviewLineType.Empty }
+
+        assertEquals("[Verse]", rendered[0].text)
+        assertEquals(3, rendered.size)
+        val secondColumnStart = rendered[1].text.indexOf("Ab13")
+        val thirdColumnStart = rendered[1].text.indexOf("Gbsus4")
+        assertTrue(secondColumnStart > rendered[1].text.indexOf("Ebm7"))
+        assertTrue(thirdColumnStart > secondColumnStart)
+        assertEquals(secondColumnStart, rendered[2].text.indexOf("C#m7"))
+        assertEquals(thirdColumnStart, rendered[2].text.indexOf("F#sus4"))
     }
 
     @Test
@@ -797,6 +874,28 @@ class PreviewChartFormatterTest {
             listOf("[Chorus]", "[Bridge]"),
             columns[1].filter { it.type == PreviewLineType.Section }.map { it.text },
         )
+    }
+
+    @Test
+    fun splitPreviewLinesForHeightConstrainedColumns_movesOverflowTailIntoSecondColumn() {
+        val lines = listOf(
+            PreviewLine(text = "[Verse]", type = PreviewLineType.Section),
+            PreviewLine(text = "C   G", type = PreviewLineType.Chord),
+            PreviewLine(text = "First lyric", type = PreviewLineType.Lyric),
+            PreviewLine(text = "Am   F", type = PreviewLineType.Chord),
+            PreviewLine(text = "Second lyric", type = PreviewLineType.Lyric),
+        )
+
+        val columns = splitPreviewLinesForHeightConstrainedColumns(
+            lines = lines,
+            lineHeightsPx = listOf(12, 10, 10, 10, 10),
+            maxFirstColumnHeightPx = 40,
+            lineSpacingPx = 2,
+        )
+
+        assertEquals(2, columns.size)
+        assertEquals(listOf("[Verse]", "C   G", "First lyric"), columns[0].map { it.text })
+        assertEquals(listOf("Am   F", "Second lyric"), columns[1].map { it.text })
     }
 
     private fun visualChordStarts(line: String): List<Int> {

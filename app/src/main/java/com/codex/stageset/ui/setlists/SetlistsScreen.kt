@@ -34,7 +34,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.codex.stageset.data.repository.SetlistDetail
 import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.data.repository.SetlistSummary
+import com.codex.stageset.ui.common.StageSetTopAppBar
 import com.codex.stageset.ui.common.readUtf8Text
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -119,7 +119,7 @@ fun SetlistsRoute(
                 SnackbarHost(snackbarHostState)
             },
             topBar = {
-                TopAppBar(
+                StageSetTopAppBar(
                     title = {
                         Text(
                             text = "Setlists",
@@ -129,14 +129,14 @@ fun SetlistsRoute(
                     },
                     actions = {
                         if (compactTopBar) {
-                            androidx.compose.material3.IconButton(
+                            TextButton(
                                 onClick = {
                                     importArchiveLauncher.launch(
                                         arrayOf("application/json", "text/plain", "*/*"),
                                     )
                                 },
                             ) {
-                                Icon(Icons.Outlined.EditNote, contentDescription = "Import setlist")
+                                Text("Import setlist")
                             }
                             androidx.compose.material3.IconButton(onClick = onCreateSetlist) {
                                 Icon(Icons.Outlined.Add, contentDescription = "New setlist")
@@ -149,7 +149,7 @@ fun SetlistsRoute(
                                     )
                                 },
                             ) {
-                                Text("Import Setlist")
+                                Text("Import setlist")
                             }
                             FilledTonalButton(onClick = onCreateSetlist) {
                                 Icon(Icons.Outlined.Add, contentDescription = null)
@@ -389,7 +389,11 @@ private fun SetlistEmptyState(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(text = title, style = MaterialTheme.typography.headlineMedium)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             Text(
                 text = body,
                 style = MaterialTheme.typography.bodyLarge,

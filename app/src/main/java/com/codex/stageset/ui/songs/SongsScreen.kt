@@ -25,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.codex.stageset.data.repository.SongRepository
 import com.codex.stageset.data.repository.SongSummary
+import com.codex.stageset.ui.common.StageSetTopAppBar
 
 @Composable
 fun SongsRoute(
@@ -68,7 +68,7 @@ fun SongsRoute(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
         topBar = {
-            TopAppBar(
+            StageSetTopAppBar(
                 title = {
                     Text(
                         text = "Songs",
@@ -208,6 +208,7 @@ private fun EmptyState(
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = body,

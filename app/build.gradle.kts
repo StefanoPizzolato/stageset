@@ -5,6 +5,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val appVersionCode = providers.gradleProperty("appVersionCode").map { it.toInt() }.orElse(2).get()
+val appVersionName = providers.gradleProperty("appVersionName").orElse("1.0.1").get()
+
 android {
     namespace = "com.codex.stageset"
     compileSdk = 35
@@ -13,8 +16,8 @@ android {
         applicationId = "com.it.sunnysiteup.stageset"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

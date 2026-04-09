@@ -50,6 +50,8 @@ enum class PreviewLineType {
     Empty,
 }
 
+private const val MinimumChordOnlyGap = 3
+
 fun buildPreviewLines(
     chart: String,
     options: PreviewRenderOptions = PreviewRenderOptions(),
@@ -609,19 +611,20 @@ private fun parsePreviewChordPlacements(line: String): List<ChordPlacement>? {
 }
 
 private fun parseCompressedPreviewChordLine(line: String): StyledPreviewText? {
-    val trimmed = line.trim()
+    val normalizedLine = normalizeCompressedRepeatChordSpacing(line)
+    val trimmed = normalizedLine.trim()
     if (!trimmed.contains(": x")) {
         return null
     }
 
     val repeatMatcher = Regex(""":[ \t]*x\d+""")
-    val matches = repeatMatcher.findAll(line).toList()
+    val matches = repeatMatcher.findAll(normalizedLine).toList()
     if (matches.isEmpty()) {
         return null
     }
 
     val accentSpans = buildList {
-        line.forEachIndexed { index, character ->
+        normalizedLine.forEachIndexed { index, character ->
             if (character == ':') {
                 add(PreviewSpan(start = index, endExclusive = index + 1))
             }
@@ -638,9 +641,61 @@ private fun parseCompressedPreviewChordLine(line: String): StyledPreviewText? {
     }.distinct()
 
     return StyledPreviewText(
-        text = line,
+        text = normalizedLine,
         accentSpans = accentSpans,
     )
+}
+
+private fun normalizeCompressedRepeatChordSpacing(line: String): String {
+    val repeatMatch = Regex("""^(\s*):(.+?)(:[ \t]*x\d+\s*)$""").matchEntire(line) ?: return normalizeMinimumCompressedChordSpacing(line)
+    val motif = repeatMatch.groupValues[2]
+    val normalizedMotif = parsePreviewChordPlacements(motif)
+        ?.map(ChordPlacement::chord)
+        ?.let { chords -> compressChordTextSequence(chords = chords) }
+        ?: normalizeMinimumCompressedChordSpacing(motif)
+    return repeatMatch.groupValues[1] + ":" + normalizedMotif + repeatMatch.groupValues[3]
+}
+
+private fun normalizeMinimumCompressedChordSpacing(line: String): String {
+    if (line.isBlank()) {
+        return line
+    }
+
+    val builder = StringBuilder()
+    var index = 0
+    while (index < line.length) {
+        val character = line[index]
+        if (!character.isWhitespace()) {
+            builder.append(character)
+            index++
+            continue
+        }
+
+        val gapStart = index
+        while (index < line.length && line[index].isWhitespace()) {
+            index++
+        }
+
+        val previousChar = line.getOrNull(gapStart - 1)
+        val nextChar = line.getOrNull(index)
+        val rawGap = line.substring(gapStart, index)
+        val shouldEnforceMinimumGap = previousChar != null &&
+            nextChar != null &&
+            !previousChar.isWhitespace() &&
+            !nextChar.isWhitespace() &&
+            previousChar != ':' &&
+            nextChar != ':' &&
+            nextChar.lowercaseChar() != 'x' &&
+            rawGap.all { it == ' ' || it == '\t' }
+
+        if (shouldEnforceMinimumGap && visualWidth(rawGap) < MinimumChordOnlyGap) {
+            builder.append(" ".repeat(MinimumChordOnlyGap))
+        } else {
+            builder.append(rawGap)
+        }
+    }
+
+    return builder.toString()
 }
 
 private fun buildChordSlotLayout(
@@ -664,6 +719,7 @@ private fun buildChordSlotLayout(
             (current.start - (previous.start + previous.chord.length)).coerceAtLeast(1)
         }
         val representativeGap = representativeGap(rawGaps, denseSpacing = denseSpacing)
+            .coerceAtLeast(MinimumChordOnlyGap)
         slotStarts[slotIndex] = slotStarts[slotIndex - 1] + maxChordLengths[slotIndex - 1] + representativeGap
     }
 
@@ -693,7 +749,7 @@ private fun renderColumnizedChordLine(
         return ""
     }
     if (slotLayout == null) {
-        return placements.joinToString("  ") { it.chord }
+        return placements.joinToString("   ") { it.chord }
     }
 
     val builder = StringBuilder()
@@ -704,7 +760,7 @@ private fun renderColumnizedChordLine(
         val slotStart = if (index == 0) {
             preferredSlotStart
         } else {
-            maxOf(preferredSlotStart, renderedColumn + 2)
+            maxOf(preferredSlotStart, renderedColumn + MinimumChordOnlyGap)
         }
         renderedColumn = appendSpacingToColumn(
             builder = builder,
@@ -791,16 +847,12 @@ private fun buildCompressedChordPreviewLines(
             index++
         }
 
-        val styledText = StyledPreviewText(
-            text = compressChordTextSequence(
-                chords = chordTokens.subList(runStart, index),
-                denseSpacing = denseSpacing,
-            ),
-        )
-        compressedSegments += CompressedChordToken(
-            visualWidth = visualWidth(styledText.text),
-            styledText = styledText,
-        )
+        chordTokens.subList(runStart, index).forEach { chord ->
+            compressedSegments += CompressedChordToken(
+                visualWidth = visualWidth(chord),
+                styledText = StyledPreviewText(text = chord),
+            )
+        }
     }
 
     return packCompressedChordTokens(
@@ -835,10 +887,9 @@ private fun compressChordTextSequence(
         val previous = chords[index - 1]
         val current = chords[index]
         val separator = when {
-            denseSpacing && maxOf(previous.length, current.length) >= 3 -> "  "
-            denseSpacing -> " "
+            denseSpacing -> "   "
             maxOf(previous.length, current.length) >= 3 -> "    "
-            else -> "  "
+            else -> "   "
         }
         builder.append(separator)
         builder.append(current)
@@ -933,52 +984,90 @@ private fun packCompressedChordTokens(
         return emptyList()
     }
 
-    val packedLines = mutableListOf<StyledPreviewText>()
-    val separator = if (denseSpacing) "  " else "   "
+    val separator = "   "
     val separatorWidth = visualWidth(separator)
     val maxVisualWidth = if (denseSpacing) 28 else 64
+    val rows = chooseCompressedChordTableRows(
+        tokens = tokens,
+        separatorWidth = separatorWidth,
+        maxVisualWidth = maxVisualWidth,
+    )
+    val columnWidths = List(rows.maxOfOrNull(List<CompressedChordToken>::size) ?: 0) { columnIndex ->
+        rows.maxOfOrNull { row -> row.getOrNull(columnIndex)?.visualWidth ?: 0 } ?: 0
+    }
 
-    var currentText = StringBuilder()
-    val currentSpans = mutableListOf<PreviewSpan>()
-    var currentWidth = 0
+    return rows.map { row ->
+        val builder = StringBuilder()
+        val accentSpans = mutableListOf<PreviewSpan>()
+        var currentColumn = 0
 
-    fun commitLine() {
-        if (currentText.isNotEmpty()) {
-            packedLines += StyledPreviewText(
-                text = currentText.toString(),
-                accentSpans = currentSpans.toList(),
+        row.forEachIndexed { columnIndex, token ->
+            val targetColumn = if (columnIndex == 0) {
+                0
+            } else {
+                columnWidths.take(columnIndex).sum() + (separatorWidth * columnIndex)
+            }
+            currentColumn = appendPlainSpacesToColumn(
+                builder = builder,
+                currentColumn = currentColumn,
+                targetColumn = targetColumn,
             )
-            currentText = StringBuilder()
-            currentSpans.clear()
-            currentWidth = 0
+
+            val offset = builder.length
+            builder.append(token.styledText.text)
+            accentSpans += token.styledText.accentSpans.map { span ->
+                PreviewSpan(
+                    start = span.start + offset,
+                    endExclusive = span.endExclusive + offset,
+                )
+            }
+            currentColumn = targetColumn + token.visualWidth
+        }
+
+        StyledPreviewText(
+            text = builder.toString().trimEnd(),
+            accentSpans = accentSpans,
+        )
+    }
+}
+
+private fun chooseCompressedChordTableRows(
+    tokens: List<CompressedChordToken>,
+    separatorWidth: Int,
+    maxVisualWidth: Int,
+): List<List<CompressedChordToken>> {
+    if (tokens.isEmpty()) {
+        return emptyList()
+    }
+
+    for (columnCount in tokens.size downTo 1) {
+        val rows = tokens.chunked(columnCount)
+        val columnWidths = List(columnCount) { columnIndex ->
+            rows.maxOfOrNull { row -> row.getOrNull(columnIndex)?.visualWidth ?: 0 } ?: 0
+        }
+        val widestRow = rows.maxOf { row ->
+            row.indices.sumOf { columnIndex -> columnWidths[columnIndex] } +
+                (separatorWidth * (row.size - 1).coerceAtLeast(0))
+        }
+        if (widestRow <= maxVisualWidth) {
+            return rows
         }
     }
 
-    tokens.forEach { token ->
-        val needsSeparator = currentText.isNotEmpty()
-        val projectedWidth = currentWidth + (if (needsSeparator) separatorWidth else 0) + token.visualWidth
-        if (needsSeparator && projectedWidth > maxVisualWidth) {
-            commitLine()
-        }
+    return tokens.map(::listOf)
+}
 
-        if (currentText.isNotEmpty()) {
-            currentText.append(separator)
-            currentWidth += separatorWidth
-        }
-
-        val offset = currentText.length
-        currentText.append(token.styledText.text)
-        currentSpans += token.styledText.accentSpans.map { span ->
-            PreviewSpan(
-                start = span.start + offset,
-                endExclusive = span.endExclusive + offset,
-            )
-        }
-        currentWidth += token.visualWidth
+private fun appendPlainSpacesToColumn(
+    builder: StringBuilder,
+    currentColumn: Int,
+    targetColumn: Int,
+): Int {
+    var column = currentColumn
+    while (column < targetColumn) {
+        builder.append(' ')
+        column++
     }
-
-    commitLine()
-    return packedLines
+    return column
 }
 
 private fun compactChordGap(rawGap: Int, denseSpacing: Boolean): Int = when {

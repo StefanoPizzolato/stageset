@@ -15,15 +15,24 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.codex.stageset.chart.MelodyNotation
+import kotlin.math.roundToInt
 
 private val FallbackSectionHeadingPalette = listOf(
     Color(0xFF6DD6FF),
@@ -84,6 +93,8 @@ fun ChartPreview(
         buildPreviewLines(previewChartSource.chart, previewChartSource.options)
     }
     val scrollState = rememberScrollState()
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
     val defaultSectionColor = MaterialTheme.colorScheme.secondary
     val sectionHeadingColors = remember(
         previewLines,
@@ -100,10 +111,13 @@ fun ChartPreview(
         fontSize = textSizeSp.sp,
         lineHeight = (textSizeSp * 1.45f).sp,
     )
+    val titleTextStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold)
+    val subtitleTextStyle = MaterialTheme.typography.bodyLarge
     val sectionTextStyle = MaterialTheme.typography.titleMedium.copy(
         fontSize = (textSizeSp * 0.9f).sp,
         lineHeight = (textSizeSp * 1.2f).sp,
     )
+    val tempoTextStyle = MaterialTheme.typography.labelLarge
     val notationScale = (textSizeSp / 20f).coerceIn(0.7f, 1.7f)
 
     Surface(
@@ -119,9 +133,42 @@ fun ChartPreview(
                     .fillMaxHeight(),
             ) {
                 val useTwoColumns = previewOptions.twoColumns && maxWidth >= 720.dp
-                val lineColumns = remember(previewLines, useTwoColumns) {
+                val lineColumns = remember(
+                    previewLines,
+                    useTwoColumns,
+                    maxWidth,
+                    maxHeight,
+                    showHeader,
+                    title,
+                    artist,
+                    keySignature,
+                    titleTextStyle,
+                    subtitleTextStyle,
+                    chartTextStyle,
+                    sectionTextStyle,
+                    tempoTextStyle,
+                    notationScale,
+                    density,
+                    textMeasurer,
+                ) {
                     if (useTwoColumns) {
-                        splitPreviewLinesForTwoColumns(previewLines)
+                        resolveTwoColumnPreviewLineColumns(
+                            previewLines = previewLines,
+                            title = title,
+                            artist = artist,
+                            keySignature = keySignature,
+                            showHeader = showHeader,
+                            titleTextStyle = titleTextStyle,
+                            subtitleTextStyle = subtitleTextStyle,
+                            chartTextStyle = chartTextStyle,
+                            sectionTextStyle = sectionTextStyle,
+                            tempoTextStyle = tempoTextStyle,
+                            notationScale = notationScale,
+                            maxWidth = maxWidth,
+                            maxHeight = maxHeight,
+                            density = density,
+                            textMeasurer = textMeasurer,
+                        )
                     } else {
                         listOf(previewLines)
                     }
@@ -138,8 +185,7 @@ fun ChartPreview(
                     if (showHeader) {
                         Text(
                             text = title.ifBlank { "Untitled song" },
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.SemiBold,
+                            style = titleTextStyle,
                         )
                         if (artist.isNotBlank() || keySignature.isNotBlank()) {
                             Text(
@@ -147,7 +193,7 @@ fun ChartPreview(
                                     artist.takeIf { it.isNotBlank() },
                                     keySignature.takeIf { it.isNotBlank() }?.let { "Key $it" },
                                 ).joinToString(" - "),
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = subtitleTextStyle,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -305,6 +351,337 @@ private fun PreviewLinesColumn(
             }
         }
     }
+}
+
+private fun resolveTwoColumnPreviewLineColumns(
+    previewLines: List<PreviewLine>,
+    title: String,
+    artist: String,
+    keySignature: String,
+    showHeader: Boolean,
+    titleTextStyle: TextStyle,
+    subtitleTextStyle: TextStyle,
+    chartTextStyle: TextStyle,
+    sectionTextStyle: TextStyle,
+    tempoTextStyle: TextStyle,
+    notationScale: Float,
+    maxWidth: Dp,
+    maxHeight: Dp,
+    density: androidx.compose.ui.unit.Density,
+    textMeasurer: TextMeasurer,
+): List<List<PreviewLine>> {
+    val balancedColumns = splitPreviewLinesForTwoColumns(previewLines)
+    if (balancedColumns.size <= 1 || maxHeight == Dp.Infinity) {
+        return balancedColumns
+    }
+
+    val contentPaddingPx = with(density) { 24.dp.roundToPx() }
+    val columnSpacingPx = with(density) { 24.dp.roundToPx() }
+    val lineSpacingPx = with(density) { 8.dp.roundToPx() }
+    val contentWidthPx = (with(density) { maxWidth.roundToPx() } - (contentPaddingPx * 2)).coerceAtLeast(0)
+    val columnWidthPx = ((contentWidthPx - columnSpacingPx) / 2).coerceAtLeast(0)
+    if (columnWidthPx <= 0) {
+        return balancedColumns
+    }
+
+    val availableColumnHeightPx = (
+        with(density) { maxHeight.roundToPx() } -
+            (contentPaddingPx * 2) -
+            measurePreviewHeaderHeightPx(
+                title = title,
+                artist = artist,
+                keySignature = keySignature,
+                showHeader = showHeader,
+                titleTextStyle = titleTextStyle,
+                subtitleTextStyle = subtitleTextStyle,
+                textMeasurer = textMeasurer,
+                maxWidthPx = contentWidthPx,
+                density = density,
+            )
+        ).coerceAtLeast(0)
+
+    if (availableColumnHeightPx <= 0) {
+        return balancedColumns
+    }
+
+    val balancedOverflow = balancedColumns.any { column ->
+        measurePreviewColumnHeightPx(
+            measurePreviewLineHeightsPx(
+                lines = column,
+                columnWidthPx = columnWidthPx,
+                chartTextStyle = chartTextStyle,
+                sectionTextStyle = sectionTextStyle,
+                tempoTextStyle = tempoTextStyle,
+                notationScale = notationScale,
+                textMeasurer = textMeasurer,
+                density = density,
+            ),
+            lineSpacingPx = lineSpacingPx,
+        ) > availableColumnHeightPx
+    }
+
+    if (!balancedOverflow) {
+        return balancedColumns
+    }
+
+    return splitPreviewLinesForHeightConstrainedColumns(
+        lines = previewLines,
+        lineHeightsPx = measurePreviewLineHeightsPx(
+            lines = previewLines,
+            columnWidthPx = columnWidthPx,
+            chartTextStyle = chartTextStyle,
+            sectionTextStyle = sectionTextStyle,
+            tempoTextStyle = tempoTextStyle,
+            notationScale = notationScale,
+            textMeasurer = textMeasurer,
+            density = density,
+        ),
+        maxFirstColumnHeightPx = availableColumnHeightPx,
+        lineSpacingPx = lineSpacingPx,
+    )
+}
+
+private fun measurePreviewHeaderHeightPx(
+    title: String,
+    artist: String,
+    keySignature: String,
+    showHeader: Boolean,
+    titleTextStyle: TextStyle,
+    subtitleTextStyle: TextStyle,
+    textMeasurer: TextMeasurer,
+    maxWidthPx: Int,
+    density: androidx.compose.ui.unit.Density,
+): Int {
+    if (!showHeader || maxWidthPx <= 0) {
+        return 0
+    }
+
+    val spacingPx = with(density) { 8.dp.roundToPx() }
+    var totalHeightPx = measurePreviewTextHeightPx(
+        text = title.ifBlank { "Untitled song" },
+        style = titleTextStyle,
+        maxWidthPx = maxWidthPx,
+        textMeasurer = textMeasurer,
+    )
+
+    val subtitle = listOfNotNull(
+        artist.takeIf { it.isNotBlank() },
+        keySignature.takeIf { it.isNotBlank() }?.let { "Key $it" },
+    ).joinToString(" - ")
+
+    if (subtitle.isNotBlank()) {
+        totalHeightPx += spacingPx
+        totalHeightPx += measurePreviewTextHeightPx(
+            text = subtitle,
+            style = subtitleTextStyle,
+            maxWidthPx = maxWidthPx,
+            textMeasurer = textMeasurer,
+        )
+    }
+
+    totalHeightPx += spacingPx
+    return totalHeightPx
+}
+
+private fun measurePreviewLineHeightsPx(
+    lines: List<PreviewLine>,
+    columnWidthPx: Int,
+    chartTextStyle: TextStyle,
+    sectionTextStyle: TextStyle,
+    tempoTextStyle: TextStyle,
+    notationScale: Float,
+    textMeasurer: TextMeasurer,
+    density: androidx.compose.ui.unit.Density,
+): List<Int> {
+    val sectionStyle = sectionTextStyle.copy(fontWeight = FontWeight.SemiBold)
+    val chordStyle = chartTextStyle.copy(fontFamily = FontFamily.Monospace)
+    val lyricStyle = chartTextStyle.copy(fontFamily = FontFamily.Monospace)
+    val lyricCueStyle = chartTextStyle.copy(fontStyle = FontStyle.Italic)
+    val melodyErrorStyle = chartTextStyle.copy(fontFamily = FontFamily.Monospace)
+
+    return lines.map { line ->
+        when (line.type) {
+            PreviewLineType.Section -> measurePreviewTextHeightPx(
+                text = line.text,
+                style = sectionStyle,
+                maxWidthPx = columnWidthPx,
+                textMeasurer = textMeasurer,
+            )
+            PreviewLineType.Chord -> measurePreviewTextHeightPx(
+                text = protectSlashChordBreaks(
+                    text = line.text,
+                    accentSpans = line.accentSpans,
+                ).text,
+                style = chordStyle,
+                maxWidthPx = columnWidthPx,
+                textMeasurer = textMeasurer,
+            )
+            PreviewLineType.Lyric -> measurePreviewTextHeightPx(
+                text = line.text,
+                style = lyricStyle,
+                maxWidthPx = columnWidthPx,
+                textMeasurer = textMeasurer,
+            )
+            PreviewLineType.LyricCue -> measurePreviewTextHeightPx(
+                text = line.text,
+                style = lyricCueStyle,
+                maxWidthPx = columnWidthPx,
+                textMeasurer = textMeasurer,
+            )
+            PreviewLineType.Melody -> line.melodyNotation?.let { notation ->
+                estimateMelodyPreviewHeightPx(
+                    notation = notation,
+                    columnWidthPx = columnWidthPx,
+                    tempoTextStyle = tempoTextStyle,
+                    notationScale = notationScale,
+                    textMeasurer = textMeasurer,
+                    density = density,
+                )
+            } ?: measurePreviewTextHeightPx(
+                text = line.text,
+                style = melodyErrorStyle,
+                maxWidthPx = columnWidthPx,
+                textMeasurer = textMeasurer,
+            )
+            PreviewLineType.MelodyError -> measurePreviewTextHeightPx(
+                text = line.text,
+                style = melodyErrorStyle,
+                maxWidthPx = columnWidthPx,
+                textMeasurer = textMeasurer,
+            )
+            PreviewLineType.Empty -> measurePreviewTextHeightPx(
+                text = " ",
+                style = lyricStyle,
+                maxWidthPx = columnWidthPx,
+                textMeasurer = textMeasurer,
+            )
+        }
+    }
+}
+
+private fun measurePreviewTextHeightPx(
+    text: String,
+    style: TextStyle,
+    maxWidthPx: Int,
+    textMeasurer: TextMeasurer,
+): Int {
+    if (maxWidthPx <= 0) {
+        return 0
+    }
+
+    return textMeasurer.measure(
+        text = AnnotatedString(text),
+        style = style,
+        constraints = Constraints(maxWidth = maxWidthPx),
+    ).size.height
+}
+
+private fun estimateMelodyPreviewHeightPx(
+    notation: MelodyNotation,
+    columnWidthPx: Int,
+    tempoTextStyle: TextStyle,
+    notationScale: Float,
+    textMeasurer: TextMeasurer,
+    density: androidx.compose.ui.unit.Density,
+): Int {
+    val innerWidthPx = (
+        columnWidthPx -
+            ((with(density) { 12.dp.toPx() } * notationScale * 2f).roundToInt())
+        ).coerceAtLeast(0)
+    val innerWidthDp = with(density) { innerWidthPx.toDp().value }
+    val rowCount = layoutStaffRows(
+        notation = notation,
+        availableWidthDp = innerWidthDp,
+        scale = notationScale,
+    ).size.coerceAtLeast(1)
+    val lineSpacingPx = with(density) { 12.dp.toPx() } * notationScale
+    val rowGapPx = with(density) { 2.dp.toPx() } * notationScale
+    val defaultStaffRowHeightPx = lineSpacingPx * 6.2f
+    val canvasHeightPx = (defaultStaffRowHeightPx * rowCount) +
+        (rowGapPx * (rowCount - 1).coerceAtLeast(0))
+    val verticalPaddingPx = with(density) { 10.dp.toPx() } * notationScale * 2f
+    val tempoHeightPx = notation.tempoBpm?.let { bpm ->
+        measurePreviewTextHeightPx(
+            text = "$bpm BPM",
+            style = tempoTextStyle,
+            maxWidthPx = columnWidthPx,
+            textMeasurer = textMeasurer,
+        ) + (with(density) { 6.dp.toPx() } * notationScale)
+    } ?: 0f
+
+    return (verticalPaddingPx + canvasHeightPx + tempoHeightPx).roundToInt()
+}
+
+internal fun measurePreviewColumnHeightPx(
+    lineHeightsPx: List<Int>,
+    lineSpacingPx: Int,
+): Int {
+    if (lineHeightsPx.isEmpty()) {
+        return 0
+    }
+    return lineHeightsPx.sum() + (lineSpacingPx * (lineHeightsPx.size - 1))
+}
+
+internal fun splitPreviewLinesForHeightConstrainedColumns(
+    lines: List<PreviewLine>,
+    lineHeightsPx: List<Int>,
+    maxFirstColumnHeightPx: Int,
+    lineSpacingPx: Int,
+): List<List<PreviewLine>> {
+    if (lines.isEmpty()) {
+        return listOf(emptyList())
+    }
+    require(lines.size == lineHeightsPx.size) {
+        "Line heights must match preview lines."
+    }
+
+    var firstColumnHeightPx = 0
+    var splitIndex = lines.size
+
+    for (index in lines.indices) {
+        val nextLineHeightPx = lineHeightsPx[index]
+        val nextHeightPx = firstColumnHeightPx +
+            nextLineHeightPx +
+            if (index > 0) lineSpacingPx else 0
+
+        if (index > 0 && nextHeightPx > maxFirstColumnHeightPx) {
+            splitIndex = index
+            break
+        }
+
+        firstColumnHeightPx = nextHeightPx
+    }
+
+    if (splitIndex >= lines.size) {
+        return listOf(compactPreviewBlankLines(lines))
+    }
+
+    val leftColumn = compactPreviewBlankLines(lines.take(splitIndex))
+    val rightColumn = compactPreviewBlankLines(lines.drop(splitIndex))
+    return listOf(leftColumn, rightColumn).filter { it.isNotEmpty() }
+}
+
+private fun compactPreviewBlankLines(lines: List<PreviewLine>): List<PreviewLine> {
+    val compacted = mutableListOf<PreviewLine>()
+    var previousWasBlank = true
+
+    lines.forEach { line ->
+        if (line.type == PreviewLineType.Empty) {
+            if (!previousWasBlank) {
+                compacted += line
+            }
+            previousWasBlank = true
+        } else {
+            compacted += line
+            previousWasBlank = false
+        }
+    }
+
+    while (compacted.lastOrNull()?.type == PreviewLineType.Empty) {
+        compacted.removeAt(compacted.lastIndex)
+    }
+
+    return compacted
 }
 
 internal fun protectSlashChordBreaks(

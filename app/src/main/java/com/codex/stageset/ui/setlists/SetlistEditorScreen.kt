@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -33,15 +34,18 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -64,6 +68,7 @@ import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.data.repository.Song
 import com.codex.stageset.data.repository.SongRepository
 import com.codex.stageset.ui.common.ConfirmActionDialog
+import com.codex.stageset.ui.common.StageSetTopAppBar
 import com.codex.stageset.ui.common.writeUtf8Text
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -144,10 +149,13 @@ fun SetlistEditorRoute(
         }
     }
     val songMap = remember(allSongs) { allSongs.associateBy { it.id } }
+    val queuedSongs = queuedSongIds.mapNotNull { songMap[it] }
+    var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val compactTopBar = maxWidth < 600.dp
         val wideLayout = maxWidth >= 760.dp
+        val tabbedPhoneLayout = !wideLayout && (compactTopBar || maxHeight < 500.dp)
         val songPoolWidth = (maxWidth * 0.4f).coerceIn(320.dp, 460.dp)
 
         Scaffold(
@@ -156,7 +164,7 @@ fun SetlistEditorRoute(
                 SnackbarHost(snackbarHostState)
             },
             topBar = {
-                TopAppBar(
+                StageSetTopAppBar(
                     title = {
                         Text(
                             text = if (setlistId > 0) "Edit Setlist" else "New Setlist",
@@ -286,7 +294,7 @@ fun SetlistEditorRoute(
                     SetlistQueuePane(
                         name = name,
                         notes = notes,
-                        queuedSongs = queuedSongIds.mapNotNull { songMap[it] },
+                        queuedSongs = queuedSongs,
                         onNameChange = { name = it },
                         onNotesChange = { notes = it },
                         onMoveUp = { index ->
@@ -306,6 +314,66 @@ fun SetlistEditorRoute(
                             .weight(1f)
                             .fillMaxHeight(),
                     )
+                }
+            } else if (tabbedPhoneLayout) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        SetlistEditorTab.entries.forEachIndexed { index, tab ->
+                            Tab(
+                                selected = selectedTabIndex == index,
+                                onClick = { selectedTabIndex = index },
+                                text = { Text(tab.label) },
+                            )
+                        }
+                    }
+                    when (SetlistEditorTab.entries[selectedTabIndex]) {
+                        SetlistEditorTab.SongPool -> {
+                            SongPoolPane(
+                                songs = filteredSongPool,
+                                search = search,
+                                onSearchChange = { search = it },
+                                onAddSong = { queuedSongIds.add(it.id) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                            )
+                        }
+                        SetlistEditorTab.SetOrder -> {
+                            SetlistQueuePane(
+                                name = name,
+                                notes = notes,
+                                queuedSongs = queuedSongs,
+                                onNameChange = { name = it },
+                                onNotesChange = { notes = it },
+                                onMoveUp = { index ->
+                                    if (index > 0) {
+                                        val item = queuedSongIds.removeAt(index)
+                                        queuedSongIds.add(index - 1, item)
+                                    }
+                                },
+                                onMoveDown = { index ->
+                                    if (index < queuedSongIds.lastIndex) {
+                                        val item = queuedSongIds.removeAt(index)
+                                        queuedSongIds.add(index + 1, item)
+                                    }
+                                },
+                                onRemove = { index -> pendingRemovalIndex = index },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                compactTabMode = true,
+                            )
+                        }
+                    }
                 }
             } else {
                 Column(
@@ -327,7 +395,7 @@ fun SetlistEditorRoute(
                     SetlistQueuePane(
                         name = name,
                         notes = notes,
-                        queuedSongs = queuedSongIds.mapNotNull { songMap[it] },
+                        queuedSongs = queuedSongs,
                         onNameChange = { name = it },
                         onNotesChange = { notes = it },
                         onMoveUp = { index ->
@@ -388,6 +456,11 @@ fun SetlistEditorRoute(
             onDismiss = { pendingRemovalIndex = null },
         )
     }
+}
+
+private enum class SetlistEditorTab(val label: String) {
+    SongPool("Song pool"),
+    SetOrder("Set order"),
 }
 
 @Composable
@@ -487,18 +560,38 @@ private fun SetlistQueuePane(
     onMoveDown: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    compactTabMode: Boolean = false,
 ) {
+    val sectionSpacing = if (compactTabMode) 10.dp else 16.dp
+    val cardPadding = if (compactTabMode) 14.dp else 20.dp
+    val itemPadding = if (compactTabMode) 12.dp else 16.dp
+    val itemSpacing = if (compactTabMode) 6.dp else 8.dp
+    val itemTitleStyle = if (compactTabMode) {
+        MaterialTheme.typography.titleMedium
+    } else {
+        MaterialTheme.typography.titleLarge
+    }
+    val itemSubtitleStyle = if (compactTabMode) {
+        MaterialTheme.typography.bodySmall
+    } else {
+        MaterialTheme.typography.bodyMedium
+    }
+    val actionButtonModifier = if (compactTabMode) Modifier.size(32.dp) else Modifier
+    val actionIconModifier = if (compactTabMode) Modifier.size(18.dp) else Modifier
+
     Card(modifier = modifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(cardPadding),
+            verticalArrangement = Arrangement.spacedBy(sectionSpacing),
         ) {
-            Text(
-                text = "Set order",
-                style = MaterialTheme.typography.headlineMedium,
-            )
+            if (!compactTabMode) {
+                Text(
+                    text = "Set order",
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+            }
             OutlinedTextField(
                 value = name,
                 onValueChange = onNameChange,
@@ -511,12 +604,15 @@ private fun SetlistQueuePane(
                 onValueChange = onNotesChange,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Show notes") },
-                minLines = 2,
+                minLines = if (compactTabMode) 1 else 2,
+                maxLines = if (compactTabMode) 2 else Int.MAX_VALUE,
             )
-            AssistChip(
-                onClick = {},
-                label = { Text("${queuedSongs.size} songs in order") },
-            )
+            if (!compactTabMode) {
+                AssistChip(
+                    onClick = {},
+                    label = { Text("${queuedSongs.size} songs in order") },
+                )
+            }
             if (queuedSongs.isEmpty()) {
                 Column(
                     modifier = Modifier
@@ -556,18 +652,20 @@ private fun SetlistQueuePane(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                    .padding(itemPadding),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(
                                     modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(if (compactTabMode) 2.dp else 4.dp),
                                 ) {
                                     Text(
                                         text = "${index + 1}. ${song.name}",
-                                        style = MaterialTheme.typography.titleLarge,
+                                        style = itemTitleStyle,
                                         fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                     Text(
                                         text = listOfNotNull(
@@ -575,31 +673,52 @@ private fun SetlistQueuePane(
                                             song.preset.takeIf { it.isNotBlank() },
                                             song.keySignature.takeIf { it.isNotBlank() }?.let { "Key $it" },
                                         ).joinToString(" - "),
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = itemSubtitleStyle,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
+                                CompositionLocalProvider(
+                                    LocalMinimumInteractiveComponentEnforcement provides !compactTabMode,
                                 ) {
-                                    IconButton(
-                                        onClick = { onMoveUp(index) },
-                                        enabled = index > 0,
+                                    Row(
+                                        modifier = if (compactTabMode) Modifier.padding(start = 4.dp) else Modifier,
+                                        horizontalArrangement = Arrangement.spacedBy(itemSpacing),
+                                        verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Icon(Icons.Outlined.ArrowUpward, contentDescription = "Move up")
-                                    }
-                                    IconButton(
-                                        onClick = { onMoveDown(index) },
-                                        enabled = index < queuedSongs.lastIndex,
-                                    ) {
-                                        Icon(Icons.Outlined.ArrowDownward, contentDescription = "Move down")
-                                    }
-                                    IconButton(onClick = { onRemove(index) }) {
-                                        Icon(
-                                            Icons.Outlined.RemoveCircleOutline,
-                                            contentDescription = "Remove song",
-                                        )
+                                        IconButton(
+                                            onClick = { onMoveUp(index) },
+                                            enabled = index > 0,
+                                            modifier = actionButtonModifier,
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.ArrowUpward,
+                                                contentDescription = "Move up",
+                                                modifier = actionIconModifier,
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { onMoveDown(index) },
+                                            enabled = index < queuedSongs.lastIndex,
+                                            modifier = actionButtonModifier,
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.ArrowDownward,
+                                                contentDescription = "Move down",
+                                                modifier = actionIconModifier,
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { onRemove(index) },
+                                            modifier = actionButtonModifier,
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.RemoveCircleOutline,
+                                                contentDescription = "Remove song",
+                                                modifier = actionIconModifier,
+                                            )
+                                        }
                                     }
                                 }
                             }

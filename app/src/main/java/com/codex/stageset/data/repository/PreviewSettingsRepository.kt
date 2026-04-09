@@ -19,8 +19,11 @@ data class PreviewSettings(
 class PreviewSettingsRepository(context: Context) {
     private val preferences = context.getSharedPreferences("preview-settings", Context.MODE_PRIVATE)
     private val _settings = MutableStateFlow(readSettings())
+    private val _hasConfirmedSongViewingOptions = MutableStateFlow(readHasConfirmedSongViewingOptions())
 
     val settings: StateFlow<PreviewSettings> = _settings.asStateFlow()
+    val hasConfirmedSongViewingOptions: StateFlow<Boolean> =
+        _hasConfirmedSongViewingOptions.asStateFlow()
 
     fun setShowLyrics(showLyrics: Boolean) {
         updateSettings {
@@ -64,6 +67,13 @@ class PreviewSettingsRepository(context: Context) {
         updateSettings { it.copy(twoColumns = twoColumns) }
     }
 
+    fun confirmSongViewingOptions() {
+        preferences.edit()
+            .putBoolean(KeySongViewingOptionsConfirmed, true)
+            .apply()
+        _hasConfirmedSongViewingOptions.value = true
+    }
+
     private fun updateSettings(transform: (PreviewSettings) -> PreviewSettings) {
         val updated = transform(_settings.value)
         preferences.edit()
@@ -92,6 +102,10 @@ class PreviewSettingsRepository(context: Context) {
         )
     }
 
+    private fun readHasConfirmedSongViewingOptions(): Boolean {
+        return preferences.getBoolean(KeySongViewingOptionsConfirmed, false)
+    }
+
     private companion object {
         const val KeyShowLyrics = "show_lyrics"
         const val KeyShowLyricsCue = "show_lyrics_cue"
@@ -101,5 +115,6 @@ class PreviewSettingsRepository(context: Context) {
         const val KeyCompressChords = "compress_chords"
         const val KeyColorizeSectionHeadings = "colorize_section_headings"
         const val KeyTwoColumns = "two_columns"
+        const val KeySongViewingOptionsConfirmed = "song_viewing_options_confirmed"
     }
 }

@@ -35,7 +35,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,6 +60,7 @@ import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.ui.common.ChartPreview
 import com.codex.stageset.ui.common.PreviewRenderOptions
 import com.codex.stageset.ui.common.PreviewSettingsDialog
+import com.codex.stageset.ui.common.StageSetTopAppBar
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -156,7 +156,7 @@ fun SetlistPreviewRoute(
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
             topBar = {
-                TopAppBar(
+                StageSetTopAppBar(
                     title = {
                         Text(
                             text = setlistTitle,

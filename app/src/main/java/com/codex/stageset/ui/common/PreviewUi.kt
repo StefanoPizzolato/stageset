@@ -63,7 +63,10 @@ fun buildPreviewTitle(
 @Composable
 fun PreviewSettingsDialog(
     settings: PreviewSettings,
+    title: String = "Preview settings",
     onDismiss: () -> Unit,
+    onConfirm: () -> Unit = onDismiss,
+    confirmLabel: String = "Done",
     onShowLyricsChange: (Boolean) -> Unit,
     onShowLyricsCueChange: (Boolean) -> Unit,
     onShowChordsChange: (Boolean) -> Unit,
@@ -76,12 +79,12 @@ fun PreviewSettingsDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Done")
+            TextButton(onClick = onConfirm) {
+                Text(confirmLabel)
             }
         },
         title = {
-            Text("Preview settings")
+            Text(title)
         },
         text = {
             Column(

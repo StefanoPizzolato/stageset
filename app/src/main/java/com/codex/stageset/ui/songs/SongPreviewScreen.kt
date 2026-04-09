@@ -21,7 +21,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,6 +40,7 @@ import com.codex.stageset.data.repository.SongRepository
 import com.codex.stageset.ui.common.ChartPreview
 import com.codex.stageset.ui.common.PreviewSettingsDialog
 import com.codex.stageset.ui.common.PreviewRenderOptions
+import com.codex.stageset.ui.common.StageSetTopAppBar
 import com.codex.stageset.ui.common.buildPreviewTitle
 import kotlinx.coroutines.flow.flowOf
 
@@ -68,7 +68,7 @@ fun SongPreviewRoute(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
         topBar = {
-            TopAppBar(
+            StageSetTopAppBar(
                 title = {
                     Text(
                         text = song?.let { buildPreviewTitle(it.preset, it.keySignature, it.name) }
@@ -181,6 +181,7 @@ fun SongPreviewRoute(
     if (showSettingsDialog) {
         PreviewSettingsDialog(
             settings = previewSettings,
+            title = "Select your song viewing options",
             onDismiss = { showSettingsDialog = false },
             onShowLyricsChange = previewSettingsRepository::setShowLyrics,
             onShowLyricsCueChange = previewSettingsRepository::setShowLyricsCue,

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -37,7 +38,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -68,6 +68,7 @@ import com.codex.stageset.ui.common.ChartPreview
 import com.codex.stageset.ui.common.ConfirmActionDialog
 import com.codex.stageset.ui.common.MelodyStaffPreview
 import com.codex.stageset.ui.common.PreviewRenderOptions
+import com.codex.stageset.ui.common.StageSetTopAppBar
 import com.codex.stageset.ui.common.buildCompressedChartText
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -224,7 +225,7 @@ fun SongEditorRoute(
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0f),
             topBar = {
-                TopAppBar(
+                StageSetTopAppBar(
                     title = {
                         Text(
                             text = if (songId > 0) "Edit Song" else "New Song",
@@ -586,10 +587,6 @@ private fun SongForm(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text = "Song details",
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Text(
             text = "Store the live-ready version of the song exactly how you want to read it on stage.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -668,8 +665,9 @@ private fun SongForm(
                 onCheckedChange = onShowCompressedVersionChange,
             )
             Text(
-                text = "Show compressed version",
+                text = "Edit compressed chart",
                 style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = { showCompressedVersionHelp = true }) {
@@ -709,20 +707,26 @@ private fun SongForm(
             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
             supportingText = {
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("To write notation use @ ... @ blocks with MML notation")
-                    TextButton(
+                    Text(
+                        text = "To write notation use @ ... @ blocks with MML notation",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    IconButton(
                         onClick = { showNotationHelp = true },
+                        modifier = Modifier.size(40.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Info,
                             contentDescription = "View MML glossary",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp),
+                            tint = MaterialTheme.colorScheme.onSurface,
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("view glossary")
                     }
                 }
             },

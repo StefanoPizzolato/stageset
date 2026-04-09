@@ -40,6 +40,7 @@ import com.codex.stageset.data.repository.PreviewSettingsRepository
 import com.codex.stageset.data.repository.SetlistRepository
 import com.codex.stageset.data.repository.SongRepository
 import com.codex.stageset.data.repository.UltimateGuitarConsentRepository
+import com.codex.stageset.ui.common.PreviewSettingsDialog
 import com.codex.stageset.ui.setlists.SetlistEditorRoute
 import com.codex.stageset.ui.setlists.SetlistPreviewRoute
 import com.codex.stageset.ui.setlists.SetlistsRoute
@@ -87,6 +88,9 @@ fun StageSetApp(
     songRepository: SongRepository,
     setlistRepository: SetlistRepository,
 ) {
+    val previewSettings by previewSettingsRepository.settings.collectAsState()
+    val hasConfirmedSongViewingOptions by previewSettingsRepository.hasConfirmedSongViewingOptions
+        .collectAsState()
     val navController = rememberNavController()
     val topLevelDestinations = listOf(
         TopLevelDestination(
@@ -304,6 +308,23 @@ fun StageSetApp(
                     content(innerPadding)
                 }
             }
+        }
+
+        if (!hasConfirmedSongViewingOptions) {
+            PreviewSettingsDialog(
+                settings = previewSettings,
+                title = "Select your song viewing options",
+                onDismiss = {},
+                onConfirm = previewSettingsRepository::confirmSongViewingOptions,
+                onShowLyricsChange = previewSettingsRepository::setShowLyrics,
+                onShowLyricsCueChange = previewSettingsRepository::setShowLyricsCue,
+                onShowChordsChange = previewSettingsRepository::setShowChords,
+                onShowNotationChange = previewSettingsRepository::setShowNotation,
+                onHideRepeatedSectionChordsChange = previewSettingsRepository::setHideRepeatedSectionChords,
+                onCompressChordsChange = previewSettingsRepository::setCompressChords,
+                onColorizeSectionHeadingsChange = previewSettingsRepository::setColorizeSectionHeadings,
+                onTwoColumnsChange = previewSettingsRepository::setTwoColumns,
+            )
         }
     }
 }
